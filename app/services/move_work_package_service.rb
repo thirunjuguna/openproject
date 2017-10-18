@@ -90,7 +90,7 @@ class MoveWorkPackageService
 
       reassign_category(work_package, new_project)
 
-      # Keep the fixed_version if it's still valid in the new_project
+      # Keep the fixed_version if its still valid in the new_project
       unless new_project.shared_versions.include?(work_package.fixed_version)
         work_package.fixed_version = nil
       end

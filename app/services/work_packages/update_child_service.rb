@@ -28,7 +28,7 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-class UpdateChildWorkPackageService < UpdateWorkPackageService
+class WorkPackages::UpdateChildService < WorkPackages::UpdateService
   private
 
   def set_attributes(attributes)

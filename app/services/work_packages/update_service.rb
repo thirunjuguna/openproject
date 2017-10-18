@@ -28,7 +28,7 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-class UpdateWorkPackageService
+class WorkPackages::UpdateService
   attr_accessor :user, :work_package
 
   def initialize(user:, work_package:)
@@ -37,10 +37,9 @@ class UpdateWorkPackageService
   end
 
   def call(attributes: {}, send_notifications: true)
-    User.execute_as user do
-      JournalManager.with_send_notifications send_notifications do
-        update(attributes)
-      end
+    # TODO: wrap in transaction
+    as_user_and_sending(send_notifications) do
+      update(attributes)
     end
   end
 
@@ -102,7 +101,7 @@ class UpdateWorkPackageService
 
   def move_children
     work_package.children.each do |child|
-      result, errors = UpdateChildWorkPackageService
+      result, errors = WorkPackages::UpdateChildService
                        .new(user: user,
                             work_package: child)
                        .call(attributes: { project: work_package.project })
@@ -111,5 +110,13 @@ class UpdateWorkPackageService
     end
 
     [true, work_package.errors]
+  end
+
+  def as_user_and_sending(send_notifications)
+    User.execute_as user do
+      JournalManager.with_send_notifications send_notifications do
+        yield
+      end
+    end
   end
 end

@@ -30,7 +30,7 @@
 
 require 'spec_helper'
 
-describe UpdateChildWorkPackageService, type: :model do
+describe WorkPackages::UpdateChildService, type: :model do
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:project) do
     p = FactoryGirl.build_stubbed(:project)
@@ -58,8 +58,8 @@ describe UpdateChildWorkPackageService, type: :model do
     wp
   end
   let(:instance) do
-    UpdateChildWorkPackageService.new(user: user,
-                                      work_package: work_package)
+    described_class.new(user: user,
+                        work_package: work_package)
   end
 
   describe 'call' do

@@ -30,7 +30,7 @@
 
 require 'spec_helper'
 
-describe UpdateWorkPackageService, type: :model do
+describe WorkPackages::UpdateService, type: :model do
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:project) do
     p = FactoryGirl.build_stubbed(:project)
@@ -46,8 +46,8 @@ describe UpdateWorkPackageService, type: :model do
     wp
   end
   let(:instance) do
-    UpdateWorkPackageService.new(user: user,
-                                 work_package: work_package)
+    described_class.new(user: user,
+                        work_package: work_package)
   end
 
   describe 'call' do
@@ -240,11 +240,11 @@ describe UpdateWorkPackageService, type: :model do
         end
 
         let(:child_service) do
-          double('UpdateChildWorkPackageChildService')
+          double('WorkPackages::UpdateChildService')
         end
 
         it 'calls the service again with the same attributes for each child' do
-          expect(UpdateChildWorkPackageService)
+          expect(WorkPackages::UpdateChildService)
             .to receive(:new)
             .with(user: user,
                   work_package: child_work_package)
@@ -259,7 +259,7 @@ describe UpdateWorkPackageService, type: :model do
         end
 
         it 'returns errors of the child service calls and returns false' do
-          expect(UpdateChildWorkPackageService)
+          expect(WorkPackages::UpdateChildService)
             .to receive(:new)
             .with(user: user,
                   work_package: child_work_package)
