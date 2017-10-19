@@ -41,9 +41,9 @@ jQuery(function($) {
       $filterForm.addClass('-expanded');
     }
   }
-  $button.click(toggleProjectFilterForm);
 
   function sendForm() {
+    $('#ajax-indicator').show();
     let $advancedFilters = $(".advanced-filters--filter", $filterForm);
     let filters = [];
     $advancedFilters.each(function(_i, filter){
@@ -73,24 +73,8 @@ jQuery(function($) {
     return false;
   }
 
+  // Register event listeners
+  $button.click(toggleProjectFilterForm);
   $filterForm.submit(sendForm);
   $filterForm.on('change', sendForm);
-
-  // // Hide value inputs when not necessary and vice versa.
-  // function setValueVisibility(){
-  //   let $advancedFilters = $(".advanced-filters--filter", $filterForm);
-  //   $advancedFilters.each(function(_i, filter){
-  //     let $filter = $(filter);
-  //     let operator = $('select[name="operator"]', $filter).val();
-  //     console.log("setValueVisibility", $filter);
-  //     if (operatorsWithoutValues.includes(operator)) {
-  //       $('.advanced-filters--filter-value', $filter).hide();
-  //     } else {
-  //       $('.advanced-filters--filter-value', $filter).show();
-  //     }
-  //   });
-  // }
-  // setValueVisibility();
-
-
 });
