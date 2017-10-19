@@ -31,6 +31,8 @@ class Queries::BaseQuery
     attr_accessor :model
   end
 
+  attr_accessor :filters, :orders
+
   include Queries::AvailableFilters
   include Queries::AvailableOrders
   include ActiveModel::Validations
@@ -87,11 +89,17 @@ class Queries::BaseQuery
     self.class.model.all
   end
 
+  def find_active_filter(name)
+    filters.index_by(&:name)[name]
+  end
+
+  def find_available_filter(name)
+    available_filters.index_by(&:name)[name]
+  end
+
   protected
 
-  attr_accessor :filters,
-                :orders,
-                :user
+  attr_accessor :user
 
   def filters_valid
     filters.each do |filter|
