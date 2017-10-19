@@ -119,7 +119,7 @@ class WorkPackage < ActiveRecord::Base
 
   acts_as_watchable
 
-  after_save :update_parent_attributes
+  #after_save :update_parent_attributes
   after_destroy :update_parent_attributes
 
   after_save :remove_invalid_relations, if: -> { parent_id_changed? }
@@ -567,94 +567,6 @@ class WorkPackage < ActiveRecord::Base
 
   protected
 
-  def recalculate_attributes_for(work_package_id)
-    p = if work_package_id.is_a? WorkPackage
-          work_package_id
-        else
-          WorkPackage.find_by(id: work_package_id)
-        end
-
-    return unless p
-
-    p.inherit_dates_from_children
-
-    p.inherit_done_ratio_from_leaves
-
-    p.inherit_estimated_hours_from_leaves
-
-    # ancestors will be recursively updated
-    if p.changed?
-      p.journal_notes =
-        I18n.t('work_package.updated_automatically_by_child_changes', child: "##{id}")
-
-      # Ancestors will be updated by parent's after_save hook.
-      p.save(validate: false)
-    end
-  end
-
-  def update_parent_attributes
-    recalculate_attributes_for(parent.id) if parent.present?
-  end
-
-  def inherit_dates_from_children
-    unless children.empty?
-      self.start_date = [children.minimum(:start_date), children.minimum(:due_date)].compact.min
-      self.due_date   = [children.maximum(:start_date), children.maximum(:due_date)].compact.max
-    end
-  end
-
-  def inherit_done_ratio_from_leaves
-    return if WorkPackage.done_ratio_disabled?
-
-    return if WorkPackage.use_status_for_done_ratio? && status && status.default_done_ratio
-
-    # done ratio = weighted average ratio of leaves
-    ratio = aggregate_done_ratio
-
-    if ratio
-      self.done_ratio = ratio.round
-    end
-  end
-
-  ##
-  # done ratio = weighted average ratio of leaves
-  def aggregate_done_ratio
-    leaves_count = leaves.count
-
-    if leaves_count > 0
-      average = leaf_average_estimated_hours
-      progress = leaf_done_ratio_sum(average) / (average * leaves_count)
-
-      progress.round(2)
-    end
-  end
-
-  def leaf_average_estimated_hours
-    # 0 and nil shall be considered the same for estimated hours
-    average = leaves.where('estimated_hours > 0').average(:estimated_hours).to_f
-
-    average.zero? ? 1 : average
-  end
-
-  def leaf_done_ratio_sum(average_estimated_hours)
-    # Do not take into account estimated_hours when it is either nil or set to 0.0
-    sum_sql = <<-SQL
-    COALESCE((CASE WHEN estimated_hours = 0.0 THEN NULL ELSE estimated_hours END), #{average_estimated_hours})
-    * (CASE WHEN is_closed = #{self.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)
-    SQL
-
-    # distinct(false) is needed to prevent having
-    # SUM(DISTINCT ...)
-    # in the SQL query which would remove summands that have already been included (nominally)
-    leaves.joins(:status).distinct(false).sum(sum_sql)
-  end
-
-  def inherit_estimated_hours_from_leaves
-    # estimate = sum of leaves estimates
-    self.estimated_hours = leaves.sum(:estimated_hours).to_f
-    self.estimated_hours = nil if estimated_hours == 0.0
-  end
-
   def remove_invalid_relations
     # delete invalid relations of all descendants
     self_and_descendants.each do |issue|
@@ -664,8 +576,10 @@ class WorkPackage < ActiveRecord::Base
     end
   end
 
+  #TODO invalid now. Needs to be moved to a destroy service
   def recalculate_attributes_for_former_parent
     if parent_id_changed? && changes[:parent_id].first
+      #TODO invalid now
       recalculate_attributes_for(changes[:parent_id].first)
     end
   end

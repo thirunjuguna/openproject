@@ -32,7 +32,6 @@ describe WorkPackage, type: :model do
   let(:stub_work_package) { FactoryGirl.build_stubbed(:work_package) }
   let(:stub_version) { FactoryGirl.build_stubbed(:version) }
   let(:stub_project) { FactoryGirl.build_stubbed(:project) }
-  let(:work_package) { FactoryGirl.create(:work_package) }
   let(:user) { FactoryGirl.create(:user) }
 
   let(:type) { FactoryGirl.create(:type_standard) }
@@ -181,7 +180,7 @@ describe WorkPackage, type: :model do
         end
 
         context 'errors' do
-          before do work_package.save end
+          before { work_package.save }
 
           subject { work_package.errors[:type_id] }
 
@@ -193,11 +192,11 @@ describe WorkPackage, type: :model do
 
   describe '#category' do
     let(:user_2) { FactoryGirl.create(:user, member_in_project: project) }
-    let(:category) {
+    let(:category) do
       FactoryGirl.create(:category,
                          project: project,
                          assigned_to: user_2)
-    }
+    end
 
     before do
       work_package.attributes = { category_id: category.id }
@@ -240,7 +239,7 @@ describe WorkPackage, type: :model do
   describe 'responsible' do
     let(:group) { FactoryGirl.create(:group) }
 
-    before do work_package.project.add_member! group, FactoryGirl.create(:role) end
+    before { work_package.project.add_member! group, FactoryGirl.create(:role) }
 
     shared_context 'assign group as responsible' do
       before { work_package.responsible = group }
@@ -249,7 +248,7 @@ describe WorkPackage, type: :model do
     subject { work_package.valid? }
 
     context 'with assignable groups' do
-      before do allow(Setting).to receive(:work_package_group_assignment?).and_return(true) end
+      before { allow(Setting).to receive(:work_package_group_assignment?).and_return(true) }
 
       include_context 'assign group as responsible'
 
@@ -283,7 +282,7 @@ describe WorkPackage, type: :model do
       expect(stub_work_package.assignable_versions).to eq([stub_version])
     end
 
-    it 'should return the current fixed_version if the versiondid not change' do
+    it 'should return the current fixed_version if the version did not change' do
       stub_shared_versions
 
       stub_work_package.fixed_version = stub_version
@@ -326,7 +325,7 @@ describe WorkPackage, type: :model do
       end
 
       shared_examples_for 'invalid version' do
-        before do work_package.save end
+        before { work_package.save }
 
         subject { work_package.errors[:fixed_version_id] }
 
@@ -348,7 +347,7 @@ describe WorkPackage, type: :model do
       context 'open version' do
         let(:version) { version_open }
 
-        before do work_package.save end
+        before { work_package.save }
 
         it { is_expected.to be_truthy }
       end
@@ -388,7 +387,7 @@ describe WorkPackage, type: :model do
         context 'attribute update' do
           include_context 'in closed version'
 
-          before do work_package.subject = 'Subject changed' end
+          before { work_package.subject = 'Subject changed' }
 
           subject { work_package.save }
 
@@ -410,7 +409,7 @@ describe WorkPackage, type: :model do
                                roles: [workflow.role])
           }
 
-          before do login_as(user) end
+          before { login_as(user) }
 
           shared_context 'in locked version' do
             before do
@@ -631,11 +630,11 @@ describe WorkPackage, type: :model do
                          done_ratio: 30)
     }
 
-    before do work_package_2 end
+    before { work_package_2 }
 
     describe '#value' do
       context 'work package field' do
-        before do allow(Setting).to receive(:work_package_done_ratio).and_return 'field' end
+        before { allow(Setting).to receive(:work_package_done_ratio).and_return 'field' }
 
         context 'work package 1' do
           subject { work_package_1.done_ratio }
@@ -651,7 +650,7 @@ describe WorkPackage, type: :model do
       end
 
       context 'work package status' do
-        before do allow(Setting).to receive(:work_package_done_ratio).and_return 'status' end
+        before { allow(Setting).to receive(:work_package_done_ratio).and_return 'status' }
 
         context 'work package 1' do
           subject { work_package_1.done_ratio }
@@ -839,7 +838,7 @@ describe WorkPackage, type: :model do
                            project: project_2)
       }
 
-      before do work_package_3 end
+      before { work_package_3 }
 
       let(:groups) { WorkPackage.by_author(project) }
 
@@ -885,7 +884,7 @@ describe WorkPackage, type: :model do
       it { is_expected.to eq(1) }
 
       context 'and one work package in archived projects' do
-        before do work_package_in_archived_project end
+        before { work_package_in_archived_project }
 
         it { is_expected.to eq(1) }
       end
@@ -911,7 +910,7 @@ describe WorkPackage, type: :model do
       it { is_expected.to eq(1) }
 
       context 'and one work package in archived projects' do
-        before do work_package_in_archived_project end
+        before { work_package_in_archived_project }
 
         it { is_expected.to eq(2) }
       end
@@ -1148,71 +1147,66 @@ describe WorkPackage, type: :model do
   end
 
   describe '#duration' do
-    # TODO remove once only WP exists
-    [:work_package].each do |subclass|
-      describe "for #{subclass}" do
-        let(:instance) { send(subclass) }
+    let(:instance) { send(subclass) }
 
-        describe "w/ today as start date
-                  w/ tomorrow as due date" do
-          before do
-            instance.start_date = Date.today
-            instance.due_date = Date.today + 1.day
-          end
+    describe "w/ today as start date
+              w/ tomorrow as due date" do
+      before do
+        work_package.start_date = Date.today
+        work_package.due_date = Date.today + 1.day
+      end
 
-          it 'should have a duration of two' do
-            expect(instance.duration).to eq(2)
-          end
-        end
+      it 'should have a duration of two' do
+        expect(work_package.duration).to eq(2)
+      end
+    end
 
-        describe "w/ today as start date
-                  w/ today as due date" do
-          before do
-            instance.start_date = Date.today
-            instance.due_date = Date.today
-          end
+    describe "w/ today as start date
+              w/ today as due date" do
+      before do
+        work_package.start_date = Date.today
+        work_package.due_date = Date.today
+      end
 
-          it 'should have a duration of one' do
-            expect(instance.duration).to eq(1)
-          end
-        end
+      it 'should have a duration of one' do
+        expect(work_package.duration).to eq(1)
+      end
+    end
 
-        describe "w/ today as start date
-                  w/o a due date" do
-          before do
-            instance.start_date = Date.today
-            instance.due_date = nil
-          end
+    describe "w/ today as start date
+              w/o a due date" do
+      before do
+        work_package.start_date = Date.today
+        work_package.due_date = nil
+      end
 
-          it 'should have a duration of one' do
-            expect(instance.duration).to eq(1)
-          end
-        end
+      it 'should have a duration of one' do
+        expect(work_package.duration).to eq(1)
+      end
+    end
 
-        describe "w/o a start date
-                  w today as due date" do
-          before do
-            instance.start_date = nil
-            instance.due_date = Date.today
-          end
+    describe "w/o a start date
+              w today as due date" do
+      before do
+        work_package.start_date = nil
+        work_package.due_date = Date.today
+      end
 
-          it 'should have a duration of one' do
-            expect(instance.duration).to eq(1)
-          end
-        end
+      it 'should have a duration of one' do
+        expect(work_package.duration).to eq(1)
+      end
+    end
 
-        describe "w/o a start date
-                  w an erroneous due date" do
-          before do
-            instance.start_date = nil
-            instance.due_date = '856742858941748214577'
-            instance.valid?
-          end
+    describe "w/o a start date
+              w an erroneous due date" do
+      before do
+        work_package.start_date = nil
+        work_package.due_date = '856742858941748214577'
+        work_package.valid?
+      end
 
-          it 'should have a validation error' do
-            expect(instance.errors[:due_date].size).to eq(1)
-          end
-        end
+      it 'should have a validation error' do
+        expect(work_package.errors[:due_date].size).to eq(1)
       end
     end
   end

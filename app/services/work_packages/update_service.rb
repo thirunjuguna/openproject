@@ -69,6 +69,10 @@ class WorkPackages::UpdateService
   end
 
   def cleanup
+    work_package.ancestors.each do |ancestor|
+      recalculate_attributes_for(ancestor)
+    end
+
     attributes = work_package.changes.dup
     result = true
     errors = work_package.errors
@@ -118,5 +122,78 @@ class WorkPackages::UpdateService
         yield
       end
     end
+  end
+
+  def recalculate_attributes_for(wp)
+    inherit_dates_from_children(wp)
+
+    inherit_done_ratio_from_leaves(wp)
+
+    inherit_estimated_hours_from_leaves(wp)
+
+    # ancestors will be recursively updated
+    if wp.changed?
+      wp.journal_notes =
+        I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
+
+      # Ancestors will be updated by parent's after_save hook.
+      wp.save(validate: false)
+    end
+  end
+
+  def inherit_dates_from_children(wp)
+    unless wp.children.empty?
+      wp.start_date = [wp.children.minimum(:start_date), wp.children.minimum(:due_date)].compact.min
+      wp.due_date   = [wp.children.maximum(:start_date), wp.children.maximum(:due_date)].compact.max
+    end
+  end
+
+  def inherit_done_ratio_from_leaves(wp)
+    return if WorkPackage.done_ratio_disabled?
+
+    return if WorkPackage.use_status_for_done_ratio? && wp.status && wp.status.default_done_ratio
+
+    # done ratio = weighted average ratio of leaves
+    ratio = aggregate_done_ratio(wp)
+
+    if ratio
+      wp.done_ratio = ratio.round
+    end
+  end
+
+  ##
+  # done ratio = weighted average ratio of leaves
+  def aggregate_done_ratio(wp)
+    leaves_count = wp.leaves.count
+
+    if leaves_count > 0
+      average = leaf_average_estimated_hours(wp)
+      progress = leaf_done_ratio_sum(wp, average) / (average * leaves_count)
+
+      progress.round(2)
+    end
+  end
+
+  def leaf_average_estimated_hours(wp)
+    # 0 and nil shall be considered the same for estimated hours
+    average = wp.leaves.where('estimated_hours > 0').average(:estimated_hours).to_f
+
+    average.zero? ? 1 : average
+  end
+
+  def leaf_done_ratio_sum(wp, average_estimated_hours)
+    # Do not take into account estimated_hours when it is either nil or set to 0.0
+    sum_sql = <<-SQL
+    COALESCE((CASE WHEN estimated_hours = 0.0 THEN NULL ELSE estimated_hours END), #{average_estimated_hours})
+    * (CASE WHEN is_closed = #{wp.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)
+    SQL
+
+    wp.leaves.joins(:status).sum(sum_sql)
+  end
+
+  def inherit_estimated_hours_from_leaves(wp)
+    # estimate = sum of leaves estimates
+    wp.estimated_hours = wp.leaves.sum(:estimated_hours).to_f
+    wp.estimated_hours = nil if wp.estimated_hours == 0.0
   end
 end

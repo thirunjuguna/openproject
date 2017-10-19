@@ -60,49 +60,6 @@ describe 'IssueNestedSet', type: :model do
     end
   end
 
-  it 'should parent dates should be lowest start and highest due dates' do
-    parent = create_issue!
-    create_issue!(start_date: '2010-01-25', due_date: '2010-02-15', parent: parent)
-    create_issue!(due_date: '2010-02-13', parent: parent)
-    create_issue!(start_date: '2010-02-01', due_date: '2010-02-22', parent: parent)
-    parent.reload
-    assert_equal Date.parse('2010-01-25'), parent.start_date
-    assert_equal Date.parse('2010-02-22'), parent.due_date
-  end
-
-  it 'should parent done ratio should be average done ratio of leaves' do
-    parent = create_issue!
-    create_issue!(done_ratio: 20, parent: parent)
-    assert_equal 20, parent.reload.done_ratio
-    create_issue!(done_ratio: 70, parent: parent)
-    assert_equal 45, parent.reload.done_ratio
-
-    child = create_issue!(done_ratio: 0, parent: parent)
-    assert_equal 30, parent.reload.done_ratio
-
-    create_issue!(done_ratio: 30, parent: child)
-    assert_equal 30, child.reload.done_ratio
-    assert_equal 40, parent.reload.done_ratio
-  end
-
-  it 'should parent done ratio should be weighted by estimated times if any' do
-    parent = create_issue!
-    create_issue!(estimated_hours: 10, done_ratio: 20, parent: parent)
-    assert_equal 20, parent.reload.done_ratio
-    create_issue!(estimated_hours: 20, done_ratio: 50, parent: parent)
-    assert_equal (50 * 20 + 20 * 10) / 30, parent.reload.done_ratio
-  end
-
-  it 'should parent estimate should be sum of leaves' do
-    parent = create_issue!
-    create_issue!(estimated_hours: nil, parent: parent)
-    assert_nil parent.reload.estimated_hours
-    create_issue!(estimated_hours: 5, parent: parent)
-    assert_equal 5, parent.reload.estimated_hours
-    create_issue!(estimated_hours: 7, parent: parent)
-    assert_equal 12, parent.reload.estimated_hours
-  end
-
   it 'should move parent updates old parent attributes' do
     first_parent = create_issue!
     second_parent = create_issue!
