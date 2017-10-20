@@ -41,4 +41,8 @@ class ServiceResult
   end
 
   alias success? :success
+
+  def failure?
+    !success?
+  end
 end

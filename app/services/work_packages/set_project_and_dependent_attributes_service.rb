@@ -28,21 +28,42 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-# TODO: remove
-#
-class WorkPackages::UpdateChildService < WorkPackages::UpdateService
+class WorkPackages::SetProjectAndDependentAttributesService
+  include Concerns::Contracted
+
+  attr_accessor :user,
+                :work_package,
+                :contract
+
+  def initialize(user:, work_package:, contract:)
+    self.user = user
+    self.work_package = work_package
+
+    self.contract = contract.new(work_package, user)
+  end
+
+  def call(project)
+    set_attributes(project)
+
+    validate_and_result
+  end
+
   private
 
-  def set_attributes(attributes)
-    ret_values = super
+  # TODO duplicated with setAttributesWorkPackageService
+  def validate_and_result
+    boolean, errors = validate(work_package)
 
-    if work_package.project_id_changed?
-      set_fixed_version_to_nil
-      reassign_category
-      reassign_type
-    end
+    ServiceResult.new(success: boolean,
+                      errors: errors)
+  end
 
-    ret_values
+  def set_attributes(project)
+    work_package.project = project
+
+    set_fixed_version_to_nil
+    reassign_category
+    reassign_type
   end
 
   def set_fixed_version_to_nil

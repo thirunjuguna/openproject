@@ -37,7 +37,6 @@ class WorkPackages::UpdateService
   end
 
   def call(attributes: {}, send_notifications: true)
-    # TODO: wrap in transaction
     as_user_and_sending(send_notifications) do
       update(attributes)
     end
@@ -46,154 +45,142 @@ class WorkPackages::UpdateService
   private
 
   def update(attributes)
+    unit_of_work = []
+    errors = []
+
     result = set_attributes(attributes)
 
-    all_valid = result.success? && work_package.save
-    if all_valid
-      cleanup_result, cleanup_errors = cleanup
+    if result.success?
+      unit_of_work << work_package
 
-      ServiceResult.new(success: cleanup_result,
-                        errors: cleanup_errors)
-    else
-      ServiceResult.new(success: all_valid,
-                        errors: result.success? ? work_package.errors : result.errors)
+      update_descendants.tap do |updated_descendants, descendants_errors|
+        errors += descendants_errors
+        unit_of_work += updated_descendants
+      end
+
+      if errors.all?(&:empty?) && unit_of_work.all?(&:save)
+        cleanup(unit_of_work, attributes)
+      end
     end
+
+    ServiceResult.new(success: errors.all?(&:empty?),
+                      errors: errors,
+                      result: unit_of_work)
   end
 
-  def set_attributes(attributes)
+  def set_attributes(attributes, wp = work_package)
     SetAttributesWorkPackageService
       .new(user: user,
-           work_package: work_package,
+           work_package: wp,
            contract: WorkPackages::UpdateContract)
       .call(attributes)
   end
 
-  def cleanup
-    work_package.ancestors.each do |ancestor|
-      recalculate_attributes_for(ancestor)
+  def update_descendants
+    modified = []
+    errors = []
+
+    if work_package.project_id_changed?
+      work_package.descendants.each do |descendant|
+        result = move_descendant(descendant, work_package.project)
+
+        if result.success?
+          modified << descendant if descendant.changed?
+        else
+          errors << result.errors
+        end
+      end
     end
 
-    attributes = work_package.changes.dup
-    result = true
-    errors = work_package.errors
+    [modified, errors]
+  end
+
+  def move_descendant(descendant, project)
+    WorkPackages::SetProjectAndDependentAttributesService
+      .new(user: user,
+           work_package: descendant,
+           contract: WorkPackages::UpdateContract)
+      .call(project)
+  end
+
+  def cleanup(work_packages, attributes)
+    # TODO: add updated and errors to return values
+    update_ancestors(work_packages)
 
     if attributes.include?(:project_id)
-      delete_relations
-      move_time_entries
-      result, errors = move_children
+      delete_relations(work_packages)
+      move_time_entries(work_packages, attributes[:project_id])
     end
     if attributes.include?(:type_id)
       reset_custom_values
     end
-
-    [result, errors]
   end
 
-  def delete_relations
+  def delete_relations(work_packages)
     unless Setting.cross_project_work_package_relations?
-      work_package.relations.non_hierarchy.direct.destroy_all
+      Relation
+        .where(from: work_packages)
+        .or(Relation.where(to: work_packages))
+        .direct
+        .destroy_all
     end
   end
 
-  def move_time_entries
-    work_package.move_time_entries(work_package.project)
+  def move_time_entries(work_packages, project_id)
+    TimeEntry
+      .on_work_packages(work_packages)
+      .update_all(project_id: project_id)
   end
 
-  def reset_custom_values
-    work_package.reset_custom_values!
+  def reset_custom_values(work_packages)
+    work_packages.each(&:reset_custom_values!)
   end
 
-  def move_children
-    work_package.children.each do |child|
-      result, errors = WorkPackages::UpdateChildService
-                       .new(user: user,
-                            work_package: child)
-                       .call(attributes: { project: work_package.project })
+  def update_ancestors(changed_work_packages)
+    changes = changed_work_packages
+              .map { |wp| wp.previous_changes.keys }
+              .flatten
+              .uniq
+              .map(&:to_sym)
+    modified = []
+    errors = []
 
-      return result, errors unless result
+    work_package.ancestors.each do |ancestor|
+      result = inherit_to_ancestor(ancestor, changes)
+
+      if result.success?
+        modified << ancestor if ancestor.changed?
+      else
+        errors << result.errors
+      end
     end
 
-    [true, work_package.errors]
+    [modified, errors]
+  end
+
+  def inherit_to_ancestor(ancestor, changes)
+    WorkPackages::UpdateInheritedAttributesService
+      .new(user: user,
+           work_package: ancestor,
+           contract: WorkPackages::UpdateContract)
+      .call(changes)
   end
 
   def as_user_and_sending(send_notifications)
-    User.execute_as user do
-      JournalManager.with_send_notifications send_notifications do
-        yield
+    result = nil
+
+    WorkPackage.transaction do
+      User.execute_as user do
+        JournalManager.with_send_notifications send_notifications do
+          result = yield
+
+          if result.failure?
+            raise ActiveRecord::Rollback
+          end
+        end
       end
     end
-  end
 
-  def recalculate_attributes_for(wp)
-    inherit_dates_from_children(wp)
-
-    inherit_done_ratio_from_leaves(wp)
-
-    inherit_estimated_hours_from_leaves(wp)
-
-    # ancestors will be recursively updated
-    if wp.changed?
-      wp.journal_notes =
-        I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
-
-      # Ancestors will be updated by parent's after_save hook.
-      wp.save(validate: false)
-    end
-  end
-
-  def inherit_dates_from_children(wp)
-    unless wp.children.empty?
-      wp.start_date = [wp.children.minimum(:start_date), wp.children.minimum(:due_date)].compact.min
-      wp.due_date   = [wp.children.maximum(:start_date), wp.children.maximum(:due_date)].compact.max
-    end
-  end
-
-  def inherit_done_ratio_from_leaves(wp)
-    return if WorkPackage.done_ratio_disabled?
-
-    return if WorkPackage.use_status_for_done_ratio? && wp.status && wp.status.default_done_ratio
-
-    # done ratio = weighted average ratio of leaves
-    ratio = aggregate_done_ratio(wp)
-
-    if ratio
-      wp.done_ratio = ratio.round
-    end
-  end
-
-  ##
-  # done ratio = weighted average ratio of leaves
-  def aggregate_done_ratio(wp)
-    leaves_count = wp.leaves.count
-
-    if leaves_count > 0
-      average = leaf_average_estimated_hours(wp)
-      progress = leaf_done_ratio_sum(wp, average) / (average * leaves_count)
-
-      progress.round(2)
-    end
-  end
-
-  def leaf_average_estimated_hours(wp)
-    # 0 and nil shall be considered the same for estimated hours
-    average = wp.leaves.where('estimated_hours > 0').average(:estimated_hours).to_f
-
-    average.zero? ? 1 : average
-  end
-
-  def leaf_done_ratio_sum(wp, average_estimated_hours)
-    # Do not take into account estimated_hours when it is either nil or set to 0.0
-    sum_sql = <<-SQL
-    COALESCE((CASE WHEN estimated_hours = 0.0 THEN NULL ELSE estimated_hours END), #{average_estimated_hours})
-    * (CASE WHEN is_closed = #{wp.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)
-    SQL
-
-    wp.leaves.joins(:status).sum(sum_sql)
-  end
-
-  def inherit_estimated_hours_from_leaves(wp)
-    # estimate = sum of leaves estimates
-    wp.estimated_hours = wp.leaves.sum(:estimated_hours).to_f
-    wp.estimated_hours = nil if wp.estimated_hours == 0.0
+    result
   end
 end

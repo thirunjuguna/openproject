@@ -243,10 +243,6 @@ class WorkPackage < ActiveRecord::Base
     time_entries.build(attributes)
   end
 
-  def move_time_entries(project)
-    time_entries.update_all(project_id: project.id)
-  end
-
   # Users/groups the work_package can be assigned to
   extend Forwardable
   def_delegator :project, :possible_assignees, :assignable_assignees
@@ -285,6 +281,7 @@ class WorkPackage < ActiveRecord::Base
   end
   alias_method :is_milestone?, :milestone?
 
+  # TODO: move to contract
   # Returns an array of status that user is able to apply
   def new_statuses_allowed_to(user, include_default = false)
     return Status.where('1=0') if status.nil?
@@ -567,6 +564,7 @@ class WorkPackage < ActiveRecord::Base
 
   protected
 
+  # TODO: move to service
   def remove_invalid_relations
     # delete invalid relations of all descendants
     self_and_descendants.each do |issue|

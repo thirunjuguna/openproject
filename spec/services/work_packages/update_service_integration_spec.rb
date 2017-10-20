@@ -38,7 +38,7 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
   end
   let(:role) { FactoryGirl.create(:role, permissions: permissions) }
   let(:permissions) do
-    %i(view_work_packages edit_work_packages)
+    %i(view_work_packages edit_work_packages add_work_packages move_work_packages)
   end
 
   let(:type) { FactoryGirl.create(:type_standard) }
@@ -69,10 +69,10 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
     end
   end
   let(:sibling1_attributes) do
-    attributes.merge(parent: parent_work_package)
+    work_package_attributes.merge(parent: parent_work_package)
   end
   let(:sibling2_attributes) do
-    attributes.merge(parent: parent_work_package)
+    work_package_attributes.merge(parent: parent_work_package)
   end
   let(:sibling1_work_package) do
     FactoryGirl.create(:work_package,
@@ -83,11 +83,18 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
                        sibling2_attributes)
   end
   let(:child_attributes) do
-    attributes.merge(parent: work_package)
+    work_package_attributes.merge(parent: work_package)
   end
   let(:child_work_package) do
     FactoryGirl.create(:work_package,
                        child_attributes)
+  end
+  let(:grandchild_attributes) do
+    work_package_attributes.merge(parent: child_work_package)
+  end
+  let(:grandchild_work_package) do
+    FactoryGirl.create(:work_package,
+                       grandchild_attributes)
   end
   let(:instance) do
     described_class.new(user: user,
@@ -314,6 +321,45 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
           .to eql(attributes[:status])
         expect(duplicate_work_package.status)
           .to eql(attributes[:status])
+      end
+    end
+
+    describe 'moving descendants on project_id changes' do
+      let(:other_project) do
+        FactoryGirl.create(:project).tap do |p|
+          p.add_member! user, role
+        end
+      end
+      let(:attributes) { { project: other_project } }
+
+      before do
+        parent_work_package
+        child_work_package
+        grandchild_work_package
+      end
+
+      it 'moves the work_package along with its descendants' do
+        expect(subject)
+          .to be_success
+
+        expect(subject.result)
+          .to match_array([work_package, child_work_package, grandchild_work_package])
+
+        expect(work_package.project)
+          .to eql(attributes[:project])
+
+        child_work_package.reload
+        expect(child_work_package.project)
+          .to eql(attributes[:project])
+
+        grandchild_work_package.reload
+        expect(grandchild_work_package.project)
+          .to eql(attributes[:project])
+
+        # is unchanged
+        parent_work_package.reload
+        expect(parent_work_package.project)
+          .to eql(project)
       end
     end
   end
