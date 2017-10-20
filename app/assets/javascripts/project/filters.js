@@ -31,6 +31,7 @@ jQuery(function($) {
   let $button = $('#projects-filter-toggle-button');
   let operatorsWithoutValues = ['*', '!*'];
   let operatorsWithVaues = ['*', '!*'];
+  let selectFilterTypes = ['list', 'list_all', 'list_optional'];
 
   function toggleProjectFilterForm() {
     if($button.hasClass('-active')) {
@@ -49,22 +50,56 @@ jQuery(function($) {
     $advancedFilters.each(function(_i, filter){
       let $filter = $(filter);
       let filterName = $filter.attr('filter-name');
+      let filterType = $filter.attr('filter-type');
       let operator = $('select[name="operator"]', $filter).val();
-      let value = $('select[name="value"],input[name="value"]', $filter).val();
+
       let filterParam = {};
+
       if (operatorsWithoutValues.includes(operator)) {
+        // operator does not expect a value
         filterParam[filterName] = {
           'operator': operator,
           'values': []
         }
         filters.push(filterParam);
       } else {
-        if (value && value.length > 0) {
-          filterParam[filterName] = {
-            'operator': operator,
-            'values': [value]
+        // Operator expects presence of value(s)
+        let $valueBlock = $('.advanced-filters--filter-value', $filter);
+        if (selectFilterTypes.includes(filterType)) {
+          if ($valueBlock.hasClass('multi-value')) {
+            // Expect values to be an Array.
+            let values = $('.multi-select select[name="value[]"]', $valueBlock).val();
+            if (values.length > 0) {
+              filterParam[filterName] = {
+                'operator': operator,
+                'values': values
+              }
+              // only add filter if a value is present.
+              filters.push(filterParam);
+            }
+          } else {
+            // Expect value to be a single value.
+            let value = $('.single-select select[name="value"]', $valueBlock).val();
+            if (value.length > 0) {
+              filterParam[filterName] = {
+                'operator': operator,
+                'values': [value]
+              }
+              // only add filter if a value is present.
+              filters.push(filterParam);
+            }
           }
-          filters.push(filterParam);
+        } else {
+          // not a select box
+          let value = $('input[name="value"]', $valueBlock).val();
+          if (value.length > 0) {
+            filterParam[filterName] = {
+              'operator': operator,
+              'values': [value]
+            }
+            // only add filter if a value is present.
+            filters.push(filterParam);
+          }
         }
       }
     })
@@ -73,7 +108,33 @@ jQuery(function($) {
     return false;
   }
 
+  function toggleMultiselect(){
+    let $self = $(this);
+    let $valueSelector = $self.parents('.advanced-filters--filter-value');
+
+    let $singleSelect = $('.single-select select', $valueSelector);
+    let $multiSelect  = $('.multi-select select', $valueSelector);
+
+    if ($valueSelector.hasClass('multi-value')) {
+      let values = $singleSelect.val();
+      let value = null;
+      if (values && values.length > 1) {
+        value = values[0];
+      } else {
+        value = values;
+      }
+      $singleSelect.val(value);
+    } else {
+      let value = $multiSelect.val();
+      $singleSelect.val(value);
+    }
+
+    $valueSelector.toggleClass('multi-value');
+    return false;
+  }
+
   // Register event listeners
+  $('.advanced-filters--filter-value span.multi-select-toggle').click(toggleMultiselect);
   $button.click(toggleProjectFilterForm);
   $filterForm.submit(sendForm);
   $filterForm.on('change', sendForm);
