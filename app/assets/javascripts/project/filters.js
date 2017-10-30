@@ -142,14 +142,26 @@ jQuery(function($) {
 
   function removeFilter(e) {
     $(this).parents('.advanced-filters--filter').addClass('hidden');
-    $filterForm.submit();
+  }
+
+  function setValueVisibility() {
+    $selectedOperator = $(this).val();
+    $filter = $(this).parents('.advanced-filters--filter')
+    $filterValue = $('.advanced-filters--filter-value', $filter);
+    if (['*', '!*'].includes($selectedOperator)) {
+      $filterValue.addClass('hidden');
+    } else {
+      $filterValue.removeClass('hidden');
+    }
+
+
   }
 
   // Register event listeners
   $('.advanced-filters--filter-value span.multi-select-toggle').click(toggleMultiselect);
   $button.click(toggleProjectFilterForm);
   $filterForm.submit(sendForm);
+  $('select[name="operator"]', $filterForm).on('change', setValueVisibility)
   $('#add_filter_select', $filterForm).on('change', addFilter);
   $('.filter_rem', $filterForm).on('click', removeFilter);
-  $filterForm.on('change', sendForm);
 });
