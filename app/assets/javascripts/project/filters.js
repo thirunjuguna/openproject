@@ -45,7 +45,7 @@ jQuery(function($) {
 
   function sendForm() {
     $('#ajax-indicator').show();
-    let $advancedFilters = $(".advanced-filters--filter", $filterForm);
+    let $advancedFilters = $(".advanced-filters--filter:not(.hidden)", $filterForm);
     let filters = [];
     $advancedFilters.each(function(_i, filter){
       let $filter = $(filter);
@@ -133,9 +133,23 @@ jQuery(function($) {
     return false;
   }
 
+  function addFilter(e) {
+    e.preventDefault();
+    $('[filter-name="' + $(this).val() + '"]').removeClass('hidden');
+    $('#add_filter_select option:selected', $filterForm).remove();
+    return false;
+  }
+
+  function removeFilter(e) {
+    $(this).parents('.advanced-filters--filter').addClass('hidden');
+    $filterForm.submit();
+  }
+
   // Register event listeners
   $('.advanced-filters--filter-value span.multi-select-toggle').click(toggleMultiselect);
   $button.click(toggleProjectFilterForm);
   $filterForm.submit(sendForm);
+  $('#add_filter_select', $filterForm).on('change', addFilter);
+  $('.filter_rem', $filterForm).on('click', removeFilter);
   $filterForm.on('change', sendForm);
 });
