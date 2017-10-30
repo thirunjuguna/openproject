@@ -49,7 +49,7 @@ module WorkPackage::Validations
               unless: Proc.new { |wp| wp.start_date.blank? }
     validates :due_date, date: { allow_blank: true }
 
-    validate :validate_start_date_before_soonest_start_date
+   # validate :validate_start_date_before_soonest_start_date
     validate :validate_fixed_version_is_assignable, unless: :skip_fixed_version_validation?
     validate :validate_fixed_version_is_still_open, unless: :skip_fixed_version_validation?
     validate :validate_enabled_type
@@ -59,7 +59,6 @@ module WorkPackage::Validations
 
     validate :validate_parent_exists
     validate :validate_parent_in_same_project
-    validate :validate_parent_not_descendant
 
     validate :validate_status_transition
 
@@ -98,13 +97,13 @@ module WorkPackage::Validations
     !!skip_fixed_version_validation
   end
 
-  def validate_start_date_before_soonest_start_date
-    if start_date && soonest_start && start_date < soonest_start
-      errors.add :start_date,
-                 :violates_relationships,
-                 soonest_start: soonest_start
-    end
-  end
+ # def validate_start_date_before_soonest_start_date
+ #   if start_date && soonest_start && start_date < soonest_start
+ #     errors.add :start_date,
+ #                :violates_relationships,
+ #                soonest_start: soonest_start
+ #   end
+ # end
 
   def validate_fixed_version_is_assignable
     if fixed_version_id && !assignable_versions.map(&:id).include?(fixed_version_id)
@@ -154,12 +153,6 @@ module WorkPackage::Validations
        !parent.is_a?(WorkPackage::InexistentWorkPackage)
 
       errors.add :parent, :cannot_be_in_another_project
-    end
-  end
-
-  def validate_parent_not_descendant
-    if parent && descendants.include?(parent)
-      errors.add :parent, :cant_link_a_work_package_with_a_descendant
     end
   end
 

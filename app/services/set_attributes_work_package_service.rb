@@ -66,14 +66,14 @@ class SetAttributesWorkPackageService
     # for new custom fields
     work_package.set_default_values! if custom_field_context_changed?
 
-    reschedule(attributes)
+    #reschedule(attributes)
   end
 
-  def reschedule(attributes)
-    ScheduleWorkPackageService
-      .new(user: user, work_package: work_package)
-      .call(attributes: attributes)
-  end
+  #def reschedule(attributes)
+  #  ScheduleWorkPackageService
+  #    .new(user: user, work_package: work_package)
+  #    .call(attributes: attributes)
+  #end
 
   def unify_dates
     unified_date = work_package.due_date || work_package.start_date

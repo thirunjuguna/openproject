@@ -31,9 +31,9 @@
 module WorkPackage::SchedulingRules
   extend ActiveSupport::Concern
 
-  included do
-    after_save :reschedule_following_work_packages
-  end
+  #included do
+  #  after_save :reschedule_following_work_packages
+  #end
 
   # Updates start/due dates of following work packages.
   # If
@@ -150,7 +150,7 @@ module WorkPackage::SchedulingRules
   def soonest_start
     @soonest_start ||=
       Relation.from_work_package_or_ancestors(self)
-              .with_type_columns(follows: 1)
+              .follows
               .map(&:successor_soonest_start)
               .compact
               .max
@@ -172,7 +172,7 @@ module WorkPackage::SchedulingRules
   end
 
   def set_current_lock_version
-    # Refrain from using reload(select: :lock_version) as this would cause unperisted attribute
+    # Refrain from using reload(select: :lock_version) as this would cause unpersisted attribute
     # information to be lost.
     self.lock_version = WorkPackage.where(id: id).pluck(:lock_version).first || 0
   end

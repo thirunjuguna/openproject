@@ -58,6 +58,13 @@ class WorkPackages::UpdateService
         unit_of_work += updated_descendants
       end
 
+      reschedule_related.tap do |results|
+        errors += results.errors
+        unit_of_work += results.result
+      end
+
+      unit_of_work.uniq!
+
       if errors.all?(&:empty?) && unit_of_work.all?(&:save)
         cleanup(unit_of_work, attributes)
       end
@@ -164,6 +171,13 @@ class WorkPackages::UpdateService
            work_package: ancestor,
            contract: WorkPackages::UpdateContract)
       .call(changes)
+  end
+
+  def reschedule_related
+    WorkPackages::SetScheduleService
+      .new(user: user,
+           work_package: work_package)
+      .call(work_package.changed.map(&:to_sym))
   end
 
   def as_user_and_sending(send_notifications)
