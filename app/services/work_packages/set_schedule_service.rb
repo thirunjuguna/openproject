@@ -70,65 +70,11 @@ class WorkPackages::SetScheduleService
 
     altered = []
 
-    dependencies = build_dependencies
-
-    while dependencies.any?
-      dependencies.each do |work_package, dependency|
-        next unless dependency.met?(dependencies.keys) # (dependencies.keys & dependency.moved).any?
-
-        altered << reschedule(work_package, dependency, delta)
-
-        dependencies.delete(work_package)
-      end
+    WorkPackages::ScheduleDependency.new(work_package).each do |following, min_date|
+      altered << reschedule(following, min_date, delta)
     end
 
     altered.uniq
-  end
-
-  def build_dependencies
-    dependencies = Hash.new do |hash, wp|
-      hash[wp] = Dependency.new
-    end
-
-    all_following = load_all_following(work_package)
-
-    all_following.each do |following|
-      ancestors = ancestors_from_preloaded(following, all_following)
-      descendants = descendants_from_preloaded(following, all_following)
-
-      dependencies[following].ancestors += ancestors
-      dependencies[following].descendants += descendants
-
-      tree = ancestors + descendants
-
-      dependencies[following].follows_moved += moved_predecessors_from_preloaded(following, [work_package] + all_following, tree)
-      dependencies[following].follows_unmoved += unmoved_predecessors_from_preloaded(following, [work_package] + all_following, tree)
-    end
-
-    dependencies
-  end
-
-  def load_all_following(work_packages)
-    following = load_following(work_packages)
-
-    if following.any?
-      following + load_all_following(following)
-    else
-      following
-    end
-  end
-
-  def load_following(work_packages)
-    following = Relation
-                .where(to: work_packages)
-                .follows_with_hierarchy_accepted
-                .where(follows: 1)
-                .select(:from_id)
-
-    WorkPackage
-      .where(id: Relation.hierarchy.where(from_id: following).select(:to_id))
-      .or(WorkPackage.where(id: following))
-      .includes(:parent_relation, follows_relations: :to)
   end
 
   def date_rescheduling_delta
@@ -141,12 +87,10 @@ class WorkPackages::SetScheduleService
     end
   end
 
-  def reschedule(following, dependency, delta)
+  def reschedule(following, min_date, delta)
+    binding.pry if following == work_package
     following.start_date += delta
     following.due_date += delta
-
-    # TODO: handle descendant limitation
-    min_date = calculate_min_date(dependency) # all_following + [work_package])
 
     if min_date && following.start_date < min_date
       min_delta = min_date - following.start_date
@@ -156,89 +100,5 @@ class WorkPackages::SetScheduleService
     end
 
     following
-  end
-
-  def calculate_min_date(dependency)
-    #  all_following_ids = all_work_packages.map(&:id)
-
-    #ancestors = ancestors_from_preloaded(following, all_work_packages)
-    #descendants = descendants_from_preloaded(following, all_work_packages)
-
-    #subtree = ancestors + descendants + [following]
-    #unmoved = subtree
-    #          .map(&:follows_relations)
-    #          .flatten
-    #           .reject { |r| all_following_ids.include?(r.to_id) }
-    #    binding.pry if following.subject == 'following'
-    (dependency.follows_moved + dependency.follows_unmoved)
-      .map(&:successor_soonest_start)
-      .max
-  end
-
-  def ancestors_from_preloaded(work_package, candidates)
-    if work_package.parent_relation
-      parent = candidates.detect { |c| work_package.parent_relation.from_id == c.id }
-
-      if parent
-        [parent] + ancestors_from_preloaded(parent, candidates)
-      end
-    else
-      []
-    end
-  end
-
-  def descendants_from_preloaded(work_package, candidates)
-    children = candidates.select { |c| c.parent_relation && c.parent_relation.from_id == work_package.id }
-
-    children + children.map { |child| descendants_from_preloaded(child, candidates) }.flatten
-  end
-
-  def moved_predecessors_from_preloaded(work_package, moved, tree)
-    moved_predecessors = ([work_package] + tree)
-                         .map(&:follows_relations)
-                         .flatten
-                         .select do |relation|
-                           moved.detect { |c| relation.to_id == c.id }
-                         end
-
-    moved_predecessors.each do |relation|
-      relation.to = moved.detect { |c| relation.to_id == c.id }
-    end
-
-    moved_predecessors
-
-    #  .map do |relation|
-    #  candidates.detect { |c| relation.to_id == c.id }
-    #end
-  end
-
-  def unmoved_predecessors_from_preloaded(work_package, moved, tree)
-    ([work_package] + tree)
-      .map(&:follows_relations)
-      .flatten
-      .reject do |relation|
-        moved.any? { |m| relation.to_id == m.id }
-      end
-  end
-
-
-  # TODO: move into own class and add tests
-  class Dependency
-    def initialize
-      self.follows_moved = []
-      self.follows_unmoved = []
-      self.ancestors = []
-      self.descendants = []
-    end
-
-    attr_accessor :follows_moved,
-                  :follows_unmoved,
-                  :ancestors,
-                  :descendants
-
-    def met?(unhandled_work_packages)
-      (descendants & unhandled_work_packages).empty? &&
-        (follows_moved.map(&:to) & unhandled_work_packages).empty?
-    end
   end
 end

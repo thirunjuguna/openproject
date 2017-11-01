@@ -562,6 +562,18 @@ class WorkPackage < ActiveRecord::Base
     "#{table_name}.id IN (#{relation_subquery.to_sql}) OR #{table_name}.id = #{work_package.id}"
   end
 
+  def self.hierarchy_tree_following(work_packages)
+    following = Relation
+                .where(to: work_packages)
+                .follows_with_hierarchy_accepted
+                .where(follows: 1)
+                .select(:from_id)
+
+    WorkPackage
+      .where(id: Relation.hierarchy.where(from_id: following).select(:to_id))
+      .or(WorkPackage.where(id: following))
+  end
+
   protected
 
   # TODO: move to service

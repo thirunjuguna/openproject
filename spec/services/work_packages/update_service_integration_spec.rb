@@ -365,12 +365,13 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
 
     describe 'rescheduling work packages along follows/hierarchy relations' do
       # layout
-      #                   following_parent_work_package +-follows- following2_parent_work_package
-      #                                    |                                 |
-      #                                hierarchy                          hierarchy
-      #                                    |                                 |
-      #                                    +                                 +
-      # work_package +-follows- following_work_package             following2_work_package +-follows- following3_work_package
+      #                   following_parent_work_package +-follows- following2_parent_work_package   following3_parent_work_package
+      #                                    |                                 |                          /                  |
+      #                                hierarchy                          hierarchy                 hierarchy            hierarchy
+      #                                    |                                 |                        /                    |
+      #                                    +                                 +                       +                     |
+      # work_package +-follows- following_work_package     following2_work_package +-follows- following3_work_package      +
+      #                                                                                            following3_sibling_work_package
       let(:work_package_attributes) do
         { project_id: project.id,
           type_id: type.id,
@@ -382,6 +383,7 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
       end
       let(:following_attributes) do
         work_package_attributes.merge(parent: following_parent_work_package,
+                                      subject: 'following',
                                       start_date: Date.today + 6.days,
                                       due_date: Date.today + 20.days)
       end
@@ -419,7 +421,8 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
         end
       end
       let(:following3_attributes) do
-        work_package_attributes.merge(start_date: Date.today + 29.days,
+        work_package_attributes.merge(parent: following3_parent_work_package,
+                                      start_date: Date.today + 29.days,
                                       due_date: Date.today + 33.days)
       end
       let(:following3_work_package) do
@@ -428,6 +431,23 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
           wp.follows << following2_work_package
         end
       end
+      let(:following3_parent_attributes) do
+        work_package_attributes.merge(start_date: Date.today + 29.days,
+                                      due_date: Date.today + 36.days)
+      end
+      let(:following3_parent_work_package) do
+        FactoryGirl.create(:work_package,
+                           following3_parent_attributes)
+      end
+      let(:following3_sibling_attributes) do
+        work_package_attributes.merge(parent: following3_parent_work_package,
+                                      start_date: Date.today + 32.days,
+                                      due_date: Date.today + 36.days)
+      end
+      let(:following3_sibling_work_package) do
+        FactoryGirl.create(:work_package,
+                           following3_sibling_attributes)
+      end
 
       before do
         work_package
@@ -435,7 +455,9 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
         following_work_package
         following2_parent_work_package
         following2_work_package
+        following3_parent_work_package
         following3_work_package
+        following3_sibling_work_package
       end
 
       let(:attributes) do
@@ -488,6 +510,20 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
 
         expect(following3_work_package.due_date)
           .to eql Date.today + 38.days
+
+        following3_parent_work_package.reload(select: %i(start_date due_date))
+        expect(following3_parent_work_package.start_date)
+          .to eql Date.today + 29.days
+
+        expect(following3_parent_work_package.due_date)
+          .to eql Date.today + 38.days
+
+        following3_sibling.reload(select: %i(start_date due_date))
+        expect(following3_sibling_work_package.start_date)
+          .to eql Date.today + 32.days
+
+        expect(following3_sibling_work_package.due_date)
+          .to eql Date.today + 36.days
       end
     end
 

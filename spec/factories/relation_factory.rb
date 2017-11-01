@@ -34,4 +34,9 @@ FactoryGirl.define do
     delay nil
     description nil
   end
+
+  factory :follows_relation, parent: :relation do
+    relation_type 'follows'
+    delay 0
+  end
 end
