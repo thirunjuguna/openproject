@@ -141,7 +141,7 @@ module WorkPackage::SchedulingRules
   #                                             |
   #                                           parent
   #                                             |
-  # BP(due_date: 2017/07/25, delay: 2)-precedes-C
+  # CP(due_date: 2017/07/25, delay: 2)-precedes-C
   #
   # Then soonest_start for:
   #   C is 2017/07/27
