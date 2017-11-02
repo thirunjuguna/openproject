@@ -41,6 +41,12 @@ describe WorkPackages::ScheduleDependency do
   let(:following) do
     { work_package => [] }
   end
+  let(:due_date_calculation) do
+    ->(wp, boundary) { wp.due_date = boundary.min }
+  end
+  let(:start_date_calculation) do
+    ->(wp, boundary) { wp.start_date = boundary.min }
+  end
 
   before do
     following.each do |wp, results|
@@ -65,9 +71,12 @@ describe WorkPackages::ScheduleDependency do
     it do
       yielded = []
 
-      instance.each do |work_package, min_date|
-        yielded << [work_package, min_date]
-        work_package.due_date = min_date
+      instance.each do |work_package, start_boundary, due_boundary|
+        yielded << [work_package, start_boundary, due_boundary]
+        start_date_calculation.call(work_package, start_boundary)
+        due_date_calculation.call(work_package, due_boundary)
+        #work_package.due_date = min_date
+        #
       end
 
       expect(yielded)
@@ -234,6 +243,68 @@ describe WorkPackages::ScheduleDependency do
          [following_work_package3, Date.today + 1.day],
          [following_work_package2, Date.today + 7.days],
          [following_work_package4, Date.today + 8.days]]
+      end
+    end
+  end
+
+  context 'with a successor having a parent and a sibling' do
+    let!(:following_work_package) do
+      following = FactoryGirl.build_stubbed(:work_package,
+                                            subject: 'following',
+                                            start_date: Date.today + 5.days,
+                                            due_date: Date.today + 10.days)
+
+      follows_relation = FactoryGirl.build(:follows_relation,
+                                           from: following,
+                                           to: work_package)
+
+      allow(following)
+        .to receive(:follows_relations)
+        .and_return [follows_relation]
+
+      parent_relation = FactoryGirl.build(:hierarchy_relation,
+                                          from: following_parent_work_package,
+                                          to: following)
+
+      allow(following)
+        .to receive(:parent_relation)
+        .and_return parent_relation
+
+      following
+    end
+    let!(:following_parent_work_package) do
+      FactoryGirl.build_stubbed(:work_package,
+                                subject: 'following_parent',
+                                start_date: Date.today + 5.days,
+                                due_date: Date.today + 14.days)
+    end
+    let!(:following_sibling_work_package) do
+      sibling = FactoryGirl.build_stubbed(:work_package,
+                                          subject: 'following_sibling',
+                                          start_date: Date.today + 8.days,
+                                          due_date: Date.today + 14.days)
+
+      parent_relation = FactoryGirl.build(:hierarchy_relation,
+                                          from: following_parent_work_package,
+                                          to: sibling)
+
+      allow(sibling)
+        .to receive(:parent_relation)
+        .and_return parent_relation
+
+      sibling
+    end
+    let(:following) do
+      {
+        work_package => [following_work_package, following_sibling_work_package, following_parent_work_package],
+        [following_work_package, following_parent_work_package] => []
+      }
+    end
+
+    it_behaves_like 'yields the following work packages and the min date in the correct order' do
+      let(:expected) do
+        [[following_work_package, [Date.today + 1.day, nil], [Date.today + 1.day, nil]],
+         [following_parent_work_package, [Date.today + 1.day, Date.today + 8.days], [Date.today + 6.days, Date.today + 14.days]]]
       end
     end
   end

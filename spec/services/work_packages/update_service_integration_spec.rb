@@ -394,8 +394,9 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
         end
       end
       let(:following_parent_attributes) do
-        work_package_attributes.merge(start_date: Date.today + 6.days,
-                                      due_date: Date.today + 23.days)
+        work_package_attributes.merge(subject: 'following_parent',
+                                      start_date: Date.today + 6.days,
+                                      due_date: Date.today + 20.days)
       end
       let(:following_parent_work_package) do
         FactoryGirl.create(:work_package,
@@ -403,16 +404,18 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
       end
       let(:following2_attributes) do
         work_package_attributes.merge(parent: following2_parent_work_package,
-                                      start_date: Date.today + 24.days,
-                                      due_date: Date.today + 28.days)
+                                      subject: 'following2',
+                                      start_date: Date.today + 21.days,
+                                      due_date: Date.today + 25.days)
       end
       let(:following2_work_package) do
         FactoryGirl.create(:work_package,
                            following2_attributes)
       end
       let(:following2_parent_attributes) do
-        work_package_attributes.merge(start_date: Date.today + 24.days,
-                                      due_date: Date.today + 28.days)
+        work_package_attributes.merge(subject: 'following2_parent',
+                                      start_date: Date.today + 21.days,
+                                      due_date: Date.today + 25.days)
       end
       let(:following2_parent_work_package) do
         FactoryGirl.create(:work_package,
@@ -421,9 +424,10 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
         end
       end
       let(:following3_attributes) do
-        work_package_attributes.merge(parent: following3_parent_work_package,
-                                      start_date: Date.today + 29.days,
-                                      due_date: Date.today + 33.days)
+        work_package_attributes.merge(subject: 'following3',
+                                      parent: following3_parent_work_package,
+                                      start_date: Date.today + 26.days,
+                                      due_date: Date.today + 30.days)
       end
       let(:following3_work_package) do
         FactoryGirl.create(:work_package,
@@ -432,7 +436,8 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
         end
       end
       let(:following3_parent_attributes) do
-        work_package_attributes.merge(start_date: Date.today + 29.days,
+        work_package_attributes.merge(subject: 'following3_parent',
+                                      start_date: Date.today + 26.days,
                                       due_date: Date.today + 36.days)
       end
       let(:following3_parent_work_package) do
@@ -488,37 +493,37 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
           .to eql Date.today + 11.days
 
         expect(following_parent_work_package.due_date)
-          .to eql Date.today + 28.days
+          .to eql Date.today + 25.days
 
         following2_parent_work_package.reload(select: %i(start_date due_date))
         expect(following2_parent_work_package.start_date)
-          .to eql Date.today + 29.days
+          .to eql Date.today + 26.days
 
         expect(following2_parent_work_package.due_date)
-          .to eql Date.today + 33.days
+          .to eql Date.today + 30.days
 
         following2_work_package.reload(select: %i(start_date due_date))
         expect(following2_work_package.start_date)
-          .to eql Date.today + 29.days
+          .to eql Date.today + 26.days
 
         expect(following2_work_package.due_date)
-          .to eql Date.today + 33.days
+          .to eql Date.today + 30.days
 
         following3_work_package.reload(select: %i(start_date due_date))
         expect(following3_work_package.start_date)
-          .to eql Date.today + 34.days
+          .to eql Date.today + 31.days
 
         expect(following3_work_package.due_date)
-          .to eql Date.today + 38.days
+          .to eql Date.today + 35.days
 
         following3_parent_work_package.reload(select: %i(start_date due_date))
         expect(following3_parent_work_package.start_date)
-          .to eql Date.today + 29.days
+          .to eql Date.today + 31.days
 
         expect(following3_parent_work_package.due_date)
-          .to eql Date.today + 38.days
+          .to eql Date.today + 36.days
 
-        following3_sibling.reload(select: %i(start_date due_date))
+        following3_sibling_work_package.reload(select: %i(start_date due_date))
         expect(following3_sibling_work_package.start_date)
           .to eql Date.today + 32.days
 

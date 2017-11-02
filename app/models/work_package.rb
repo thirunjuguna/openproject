@@ -566,7 +566,6 @@ class WorkPackage < ActiveRecord::Base
     following = Relation
                 .where(to: work_packages)
                 .follows_with_hierarchy_accepted
-                .where(follows: 1)
                 .select(:from_id)
 
     WorkPackage

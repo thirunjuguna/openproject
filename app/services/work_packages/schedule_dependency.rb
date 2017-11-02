@@ -49,7 +49,11 @@ class WorkPackages::ScheduleDependency
         next unless dependency.met?(unhandled)
 
         # TODO: handle descendant limitation
-        yield scheduled, dependency.min_date
+        if dependency.descendants.any?
+          yield scheduled, nil, dependency.start_date, dependency.due_date
+        else
+          yield scheduled, dependency.min_date, nil, nil
+        end
 
         unhandled.delete(scheduled)
         movement = true
@@ -67,36 +71,70 @@ class WorkPackages::ScheduleDependency
   def build_dependencies
     all_following = load_all_following(work_package)
 
-    all_following.each do |following|
-      ancestors = ancestors_from_preloaded(following, all_following)
-      descendants = descendants_from_preloaded(following, all_following)
+    # TODO handle collisions where a work package
+    # is added twice
+    #all_following.each do |following|
+    #  ancestors = ancestors_from_preloaded(following, all_following)
+    #  descendants = descendants_from_preloaded(following, all_following)
 
-      dependencies[following].ancestors += ancestors
-      dependencies[following].descendants += descendants
+    #  dependencies[following].ancestors += ancestors
+    #  dependencies[following].descendants += descendants
 
-      tree = ancestors + descendants
+    #  tree = ancestors + descendants
 
-      dependencies[following].follows_moved += moved_predecessors_from_preloaded(following, [work_package] + all_following, tree)
-      dependencies[following].follows_unmoved += unmoved_predecessors_from_preloaded(following, [work_package] + all_following, tree)
-    end
+    #  dependencies[following].follows_moved += moved_predecessors_from_preloaded(following, [work_package] + all_following, tree)
+    #  dependencies[following].follows_unmoved += unmoved_predecessors_from_preloaded(following, [work_package] + all_following, tree)
+    #end
 
-    dependencies
+    #dependencies.select! do |work_package, dependency|
+    #  dependency.ancestors.any? { |a| a.follows_relations.size > 0 } ||
+    #    dependency.descendants.any? { |d| d.follows_relations.size > 0 }
+    #end
   end
 
   def load_all_following(work_packages)
     following = load_following(work_packages)
 
-    if following.any?
-      following + load_all_following(following)
-    else
-      following
+    #having_follows_relation = []
+
+    #roots = following.select { |f| f.parent_relation.nil? }
+
+    #roots.each do |root|
+    #  if root.follows_relations.any? { |r| work_packages.map(&:id).include?(r.to_id) || following.map(&:id).include?(r.to_id) }
+    #    having_follows_relation << root
+    #  end
+
+    #following.order_by { |f| f.descendants.size }
+    new_dependencies = to_dependencies(following)
+
+    new_dependencies.select! do |following, dependency|
+      dependency.ancestors.any? do |ancestor|
+        dependencies.slice(*ancestor.follows_relations.map(&:to)).any? ||
+          ancestor.follows_relations.map(&:to).include?(work_package)
+      end ||
+        dependency.descendants.any? do |descendant|
+          dependencies.slice(*descendant.follows_relations.map(&:to)).any? ||
+            descendant.follows_relations.map(&:to).include?(work_package)
+        end ||
+        dependencies.slice(*following.follows_relations.map(&:to)).any? ||
+        following.follows_relations.map(&:to).include?(work_package)
+    end
+
+    # TODO: handle merging of duplicate entries
+    dependencies.merge!(new_dependencies)
+
+    if new_dependencies.any?
+      #with_follows_relation = following.reject { |f| f.follows_relations.size.zero? }
+
+      load_all_following(new_dependencies.keys)
     end
   end
 
   def load_following(work_packages)
     WorkPackage
       .hierarchy_tree_following(work_packages)
-      .includes(:parent_relation, follows_relations: :to)
+      .includes(:parent_relation,
+                follows_relations: :to)
   end
 
   def ancestors_from_preloaded(work_package, candidates)
@@ -141,6 +179,31 @@ class WorkPackages::ScheduleDependency
       end
   end
 
+  def to_dependencies(dependent_work_packages)
+    dependent_work_packages.inject({}) do |new_dependencies, dependent_work_package|
+      ancestors = ancestors_from_preloaded(dependent_work_package, dependent_work_packages)
+      descendants = descendants_from_preloaded(dependent_work_package, dependent_work_packages)
+
+      dependency = Dependency.new
+
+      dependency.ancestors += ancestors
+      dependency.descendants += descendants
+
+      tree = ancestors + descendants
+
+      # TODO: fix follows_moved/follows_unmoved calculation which might change when additional work packages
+      # are added later
+      # e.g. calculate it only after all dependencies have been loaded
+      #binding.pry if dependent_work_package.subject == 'following2'
+      dependency.follows_moved += moved_predecessors_from_preloaded(dependent_work_package, [work_package] + dependent_work_packages + dependencies.keys, tree)
+      dependency.follows_unmoved += unmoved_predecessors_from_preloaded(dependent_work_package, [work_package] + dependent_work_packages + dependencies.keys, tree)
+
+      new_dependencies[dependent_work_package] = dependency
+
+      new_dependencies
+    end
+  end
+
   class Dependency
     def initialize
       self.follows_moved = []
@@ -155,14 +218,34 @@ class WorkPackages::ScheduleDependency
                   :descendants
 
     def met?(unhandled_work_packages)
+      #binding.pry if follows_moved.map { |f| f.to.subject }.include?('following2_parent')
       (descendants & unhandled_work_packages).empty? &&
         (follows_moved.map(&:to) & unhandled_work_packages).empty?
     end
+
+    #def follows_relation_in_tree?
+    #  ancestors.any? { |a| a.follows_relations.size > 0 } ||
+    #    descendants.any? { |d| d.follows_relations.size > 0 }
+    #end
 
     def min_date
       (follows_moved + follows_unmoved)
         .map(&:successor_soonest_start)
         .max
+    end
+
+    def start_date
+      descendants_dates.min
+    end
+
+    def due_date
+      descendants_dates.max
+    end
+
+    private
+
+    def descendants_dates
+      descendants.map(&:due_date) + descendants.map(&:start_date)
     end
   end
 end

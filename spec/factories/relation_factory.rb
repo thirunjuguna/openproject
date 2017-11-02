@@ -39,4 +39,8 @@ FactoryGirl.define do
     relation_type 'follows'
     delay 0
   end
+
+  factory :hierarchy_relation, parent: :relation do
+    relation_type 'hierarchy'
+  end
 end

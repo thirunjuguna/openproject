@@ -70,8 +70,28 @@ class WorkPackages::SetScheduleService
 
     altered = []
 
-    WorkPackages::ScheduleDependency.new(work_package).each do |following, min_date|
-      altered << reschedule(following, min_date, delta)
+    WorkPackages::ScheduleDependency.new(work_package).each do |following, min_date, start_date, due_date|
+      if min_date && start_date || min_date && due_date
+        raise 'INVALID'
+      end
+
+      # TODO: handle reducing space between two work packages connected
+      # via a follows where more days are left than the delay requires when
+      # moving the predecessor backwards
+      if start_date && due_date
+        following.start_date = start_date
+        following.due_date = due_date
+      elsif min_date && following.start_date + delta < min_date
+        min_delta = min_date - following.start_date
+
+        following.start_date += min_delta
+        following.due_date += min_delta
+      else
+        following.start_date += delta
+        following.due_date += delta
+      end
+
+      altered << following
     end
 
     altered.uniq
@@ -87,12 +107,14 @@ class WorkPackages::SetScheduleService
     end
   end
 
-  def reschedule(following, min_date, delta)
-    binding.pry if following == work_package
+  def reschedule(following, start_boundary, due_boundary, delta)
     following.start_date += delta
     following.due_date += delta
 
-    if min_date && following.start_date < min_date
+    binding.pry if following.subject == 'following3_parent'
+    binding.pry if following.subject == 'following3'
+
+    if start_boundary.min && following.start_date < start_boundary.min
       min_delta = min_date - following.start_date
 
       following.start_date += min_delta
