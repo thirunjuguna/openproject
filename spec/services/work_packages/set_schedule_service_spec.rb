@@ -43,61 +43,84 @@ describe WorkPackages::SetScheduleService do
   end
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:type) { FactoryGirl.build_stubbed(:type) }
-  let(:follower_start_date) { Date.today + 1.day }
-  let(:follower_due_date) { Date.today + 3.day }
-  let(:follower_delay) { 0 }
-  let(:following_work_package1) do
-    following = FactoryGirl.build_stubbed(:work_package,
-                                          type: type,
-                                          start_date: follower_start_date,
-                                          due_date: follower_due_date)
+  def stub_follower(start_date, due_date, predecessors)
+    work_package = FactoryGirl.build_stubbed(:work_package,
+                                             type: type,
+                                             start_date: start_date,
+                                             due_date: due_date)
 
-    relation = FactoryGirl.build(:follows_relation,
-                                 delay: follower_delay,
-                                 from: following,
-                                 to: work_package)
+    relations = predecessors.map do |predecessor, delay|
+      FactoryGirl.build_stubbed(:follows_relation,
+                                delay: delay,
+                                from: work_package,
+                                to: predecessor)
+    end
 
-    allow(following)
+    allow(work_package)
       .to receive(:follows_relations)
-      .and_return [relation]
+      .and_return relations
 
-    following
+    work_package
+  end
+
+  let(:follower1_start_date) { Date.today + 1.day }
+  let(:follower1_due_date) { Date.today + 3.day }
+  let(:follower1_delay) { 0 }
+  let(:following_work_package1) do
+    stub_follower(follower1_start_date,
+                  follower1_due_date,
+                  work_package => follower1_delay)
   end
   let(:follower2_start_date) { Date.today + 4.day }
   let(:follower2_due_date) { Date.today + 8.day }
+  let(:follower2_delay) { 0 }
   let(:following_work_package2) do
-    following = FactoryGirl.build_stubbed(:work_package,
-                                          type: type,
-                                          start_date: follower2_start_date,
-                                          due_date: follower2_due_date)
-
-    relation = FactoryGirl.build(:follows_relation,
-                                 from: following,
-                                 to: following_work_package1)
-
-    allow(following)
-      .to receive(:follows_relations)
-      .and_return [relation]
-
-    following
+    stub_follower(follower2_start_date,
+                  follower2_due_date,
+                  following_work_package1 => follower2_delay)
   end
   let(:follower3_start_date) { Date.today + 9.day }
   let(:follower3_due_date) { Date.today + 10.day }
+  let(:follower3_delay) { 0 }
   let(:following_work_package3) do
-    following = FactoryGirl.build_stubbed(:work_package,
-                                          type: type,
-                                          start_date: follower3_start_date,
-                                          due_date: follower3_due_date)
+    stub_follower(follower3_start_date,
+                  follower3_due_date,
+                  following_work_package2 => follower3_delay)
+  end
 
-    relation = FactoryGirl.build(:follows_relation,
-                                 from: following,
-                                 to: following_work_package2)
+  let(:parent_start_date) { follower1_start_date }
+  let(:parent_due_date) { follower1_due_date }
 
-    allow(following)
-      .to receive(:follows_relations)
-      .and_return [relation]
+  let(:parent_work_package) do
+    work_package = stub_follower(parent_start_date,
+                                 parent_due_date,
+                                 {})
 
-    following
+    relation = FactoryGirl.build_stubbed(:hierarchy_relation,
+                                         from: work_package,
+                                         to: following_work_package1)
+
+    allow(following_work_package1)
+      .to receive(:parent_relation)
+      .and_return relation
+
+    work_package
+  end
+
+  let(:follower_sibling_work_package) do
+    sibling = stub_follower(follower1_due_date + 2.days,
+                            follower1_due_date + 4.days,
+                            {})
+
+    relation = FactoryGirl.build_stubbed(:hierarchy_relation,
+                                         from: parent_work_package,
+                                         to: sibling)
+
+    allow(sibling)
+      .to receive(:parent_relation)
+      .and_return relation
+
+    sibling
   end
 
   subject { instance.call(attributes) }
@@ -115,6 +138,37 @@ describe WorkPackages::SetScheduleService do
     end
   end
   let(:attributes) { [:start_date] }
+
+  shared_examples_for 'reschedules' do
+    before do
+      subject
+    end
+
+    it 'is success' do
+      expect(subject)
+        .to be_success
+    end
+
+    it 'updates the following work packages' do
+      expected.each do |wp, (start_date, due_date)|
+        expect(wp.start_date)
+          .to eql start_date
+        expect(wp.due_date)
+          .to eql due_date
+      end
+    end
+
+    it 'returns the only the changed work packages' do
+      expected_to_change = if defined?(unchanged)
+                             expected.keys - unchanged
+                           else
+                             expected.keys
+                           end
+
+      expect(subject.result)
+        .to match_array expected_to_change
+    end
+  end
 
   context 'without relation' do
     it 'is success' do
@@ -140,84 +194,59 @@ describe WorkPackages::SetScheduleService do
         work_package.due_date = Date.today + 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today + 6.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today + 8.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.day] }
+        end
       end
     end
 
     context 'moving forward with the follower having some space left' do
-      let(:follower_start_date) { Date.today + 3.day }
-      let(:follower_due_date) { Date.today + 5.day }
+      let(:follower1_start_date) { Date.today + 3.day }
+      let(:follower1_due_date) { Date.today + 5.day }
 
       before do
         work_package.due_date = Date.today + 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today + 6.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today + 8.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.day] }
+        end
       end
     end
 
     context 'moving forward with the follower having some space left and a delay' do
-      let(:follower_start_date) { Date.today + 5.day }
-      let(:follower_due_date) { Date.today + 7.day }
-      let(:follower_delay) { 3 }
+      let(:follower1_start_date) { Date.today + 5.day }
+      let(:follower1_due_date) { Date.today + 7.day }
+      let(:follower1_delay) { 3 }
 
       before do
         work_package.due_date = Date.today + 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today + 9.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today + 11.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 9.days, Date.today + 11.day] }
+        end
       end
     end
 
     context 'moving forward with the follower not needing to be moved' do
-      let(:follower_start_date) { Date.today + 6.day }
-      let(:follower_due_date) { Date.today + 8.day }
+      let(:follower1_start_date) { Date.today + 6.day }
+      let(:follower1_due_date) { Date.today + 8.day }
 
       before do
         work_package.due_date = Date.today + 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today + 6.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today + 8.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.day] }
+        end
+        let(:unchanged) do
+          [following_work_package1]
+        end
       end
     end
 
@@ -226,39 +255,287 @@ describe WorkPackages::SetScheduleService do
         work_package.due_date = Date.today - 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today - 4.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today - 2.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 4.days, Date.today - 2.day] }
+        end
       end
     end
 
     context 'moving backwards with space between' do
-      let(:follower_start_date) { Date.today + 3.day }
-      let(:follower_due_date) { Date.today + 5.day }
+      let(:follower1_start_date) { Date.today + 3.day }
+      let(:follower1_due_date) { Date.today + 5.day }
 
       before do
         work_package.due_date = Date.today - 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 2.days, Date.today] }
+        end
+      end
+    end
+
+    context 'moving backwards with the follower having another relation limiting movement' do
+      let(:other_work_package) do
+        FactoryGirl.build_stubbed(:work_package,
+                                  type: type,
+                                  start_date: follower1_start_date - 8.days,
+                                  due_date: follower1_start_date - 5.days)
       end
 
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today - 2.days
-        expect(following_work_package1.due_date)
-          .to eql Date.today
+      let(:follow_relation) do
+        FactoryGirl.build_stubbed(:follows_relation,
+                                  to: work_package,
+                                  from: following_work_package1)
+      end
+
+      let(:other_follow_relation) do
+        FactoryGirl.build_stubbed(:follows_relation,
+                                  delay: 3,
+                                  to: other_work_package,
+                                  from: following_work_package1)
+      end
+
+      before do
+        allow(following_work_package1)
+          .to receive(:follows_relations)
+          .and_return [other_follow_relation, follow_relation]
+
+        work_package.due_date = Date.today - 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today, Date.today + 2.days],
+            other_work_package => [follower1_start_date - 8.days, follower1_start_date - 5.days] }
+        end
+        let(:unchanged) do
+          [other_work_package]
+        end
+      end
+    end
+  end
+
+  context 'with a single successor having a parent' do
+    let(:following) do
+      {
+        work_package => [following_work_package1,
+                         parent_work_package],
+        [following_work_package1,
+         parent_work_package] => []
+      }
+    end
+
+    before do
+      following_work_package1
+      parent_work_package
+    end
+
+    context 'moving forward' do
+      before do
+        work_package.due_date = Date.today + 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.days],
+            parent_work_package => [Date.today + 6.days, Date.today + 8.days] }
+        end
+      end
+    end
+
+    context 'moving forward with the parent having another child not being moved' do
+      let(:parent_start_date) { follower1_start_date }
+      let(:parent_due_date) { follower1_due_date + 4.days }
+
+      let(:following) do
+        {
+          work_package => [following_work_package1,
+                           parent_work_package,
+                           follower_sibling_work_package],
+          [following_work_package1,
+           parent_work_package,
+           follower_sibling_work_package] => []
+        }
+      end
+
+      before do
+        work_package.due_date = Date.today + 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.days],
+            parent_work_package => [Date.today + 5.days, Date.today + 8.days],
+            follower_sibling_work_package => [follower1_due_date + 2.days, follower1_due_date + 4.days] }
+        end
+        let(:unchanged) do
+          [follower_sibling_work_package]
+        end
+      end
+    end
+
+    context 'moving backwards' do
+      before do
+        work_package.due_date = Date.today - 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 4.days, Date.today - 2.days],
+            parent_work_package => [Date.today - 4.days, Date.today - 2.days] }
+        end
+      end
+    end
+
+    context 'moving backwards with the parent having another relation limiting movement' do
+      let(:other_work_package) do
+        FactoryGirl.build_stubbed(:work_package,
+                                  type: type,
+                                  start_date: Date.today - 8.days,
+                                  due_date: Date.today - 4.days)
+      end
+
+      let(:other_follow_relation) do
+        FactoryGirl.build_stubbed(:follows_relation,
+                                  delay: 2,
+                                  to: other_work_package,
+                                  from: parent_work_package)
+      end
+
+      before do
+        allow(parent_work_package)
+          .to receive(:follows_relations)
+          .and_return [other_follow_relation]
+
+        work_package.due_date = Date.today - 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 1.day, Date.today + 1.day],
+            parent_work_package => [Date.today - 1.day, Date.today + 1.day],
+            other_work_package => [Date.today - 8.days, Date.today - 4.days] }
+        end
+        let(:unchanged) do
+          [other_work_package]
+        end
+      end
+    end
+
+    context 'moving backwards with the parent having another relation not limiting movement' do
+      let(:other_work_package) do
+        FactoryGirl.build_stubbed(:work_package,
+                                  type: type,
+                                  start_date: Date.today - 10.days,
+                                  due_date: Date.today - 9.days)
+      end
+
+      let(:other_follow_relation) do
+        FactoryGirl.build_stubbed(:follows_relation,
+                                  delay: 2,
+                                  to: other_work_package,
+                                  from: parent_work_package)
+      end
+
+      before do
+        allow(parent_work_package)
+          .to receive(:follows_relations)
+          .and_return [other_follow_relation]
+
+        work_package.due_date = Date.today - 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 4.days, Date.today - 2.days],
+            parent_work_package => [Date.today - 4.days, Date.today - 2.days],
+            other_work_package => [Date.today - 10.days, Date.today - 9.days] }
+        end
+        let(:unchanged) do
+          [other_work_package]
+        end
+      end
+    end
+
+    context 'moving backwards with the parent having another child not being moved' do
+      let(:parent_start_date) { follower1_start_date }
+      let(:parent_due_date) { follower1_due_date + 4.days }
+
+      let(:following) do
+        {
+          work_package => [following_work_package1,
+                           parent_work_package,
+                           follower_sibling_work_package],
+          [following_work_package1,
+           parent_work_package,
+           follower_sibling_work_package] => []
+        }
+      end
+
+      before do
+        work_package.due_date = Date.today - 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 4.days, Date.today - 2.days],
+            parent_work_package => [Date.today - 4.days, Date.today + 7.days],
+            follower_sibling_work_package => [follower1_due_date + 2.days, follower1_due_date + 4.days] }
+        end
+        let(:unchanged) do
+          [follower_sibling_work_package]
+        end
+      end
+    end
+  end
+
+  context 'with a single successor having a child' do
+    let(:child_start_date) { follower1_start_date }
+    let(:child_due_date) { follower1_due_date }
+
+    let(:child_work_package) do
+      child = stub_follower(child_start_date,
+                            child_due_date,
+                            {})
+
+      relation = FactoryGirl.build_stubbed(:hierarchy_relation,
+                                           from: following_work_package1,
+                                           to: child)
+
+      allow(child)
+        .to receive(:parent_relation)
+        .and_return relation
+
+      child
+    end
+
+    let(:following) do
+      {
+        work_package => [following_work_package1,
+                         child_work_package],
+        [following_work_package1,
+         child_work_package] => []
+      }
+    end
+
+    before do
+      following_work_package1
+      child_work_package
+    end
+
+    context 'moving forward' do
+      before do
+        work_package.due_date = Date.today + 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.days],
+            child_work_package => [Date.today + 6.days, Date.today + 8.days] }
+        end
       end
     end
   end
@@ -293,25 +570,12 @@ describe WorkPackages::SetScheduleService do
         work_package.due_date = Date.today + 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today + 6.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today + 8.day
-        expect(following_work_package2.start_date)
-          .to eql Date.today + 9.day
-        expect(following_work_package2.due_date)
-          .to eql Date.today + 13.day
-        expect(following_work_package3.start_date)
-          .to eql Date.today + 14.day
-        expect(following_work_package3.due_date)
-          .to eql Date.today + 15.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.days],
+            following_work_package2 => [Date.today + 9.days, Date.today + 13.days],
+            following_work_package3 => [Date.today + 14.days, Date.today + 15.days] }
+        end
       end
     end
 
@@ -327,25 +591,15 @@ describe WorkPackages::SetScheduleService do
         work_package.due_date = Date.today + 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today + 6.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today + 8.day
-        expect(following_work_package2.start_date)
-          .to eql Date.today + 9.day
-        expect(following_work_package2.due_date)
-          .to eql Date.today + 12.day
-        expect(following_work_package3.start_date)
-          .to eql Date.today + 17.day
-        expect(following_work_package3.due_date)
-          .to eql Date.today + 18.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.days],
+            following_work_package2 => [Date.today + 9.days, Date.today + 12.days],
+            following_work_package3 => [Date.today + 17.days, Date.today + 18.days] }
+        end
+        let(:unchanged) do
+          [following_work_package3]
+        end
       end
     end
 
@@ -354,165 +608,83 @@ describe WorkPackages::SetScheduleService do
         work_package.due_date = Date.today - 5.days
       end
 
-      it 'is success' do
-        expect(subject)
-          .to be_success
-      end
-
-      it 'reschedules the follower' do
-        subject
-        expect(following_work_package1.start_date)
-          .to eql Date.today - 4.day
-        expect(following_work_package1.due_date)
-          .to eql Date.today - 2.day
-        expect(following_work_package2.start_date)
-          .to eql Date.today - 1.day
-        expect(following_work_package2.due_date)
-          .to eql Date.today + 3.day
-        expect(following_work_package3.start_date)
-          .to eql Date.today + 4.day
-        expect(following_work_package3.due_date)
-          .to eql Date.today + 5.day
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 4.days, Date.today - 2.days],
+            following_work_package2 => [Date.today - 1.days, Date.today + 3.days],
+            following_work_package3 => [Date.today + 4.days, Date.today + 5.days] }
+        end
       end
     end
   end
-#
-#  context 'with a chain of successors with two paths leadig to the same work package in the end' do
-#    let!(:following_work_package1) do
-#      following = FactoryGirl.build_stubbed(:work_package)
-#
-#      relation = FactoryGirl.build(:follows_relation,
-#                                   from: following,
-#                                   to: work_package)
-#
-#      allow(following)
-#        .to receive(:follows_relations)
-#        .and_return [relation]
-#
-#      following
-#    end
-#    let!(:following_work_package2) do
-#      following = FactoryGirl.build_stubbed(:work_package)
-#
-#      relation = FactoryGirl.build(:follows_relation,
-#                                   from: following,
-#                                   to: following_work_package1,
-#                                   delay: 5)
-#
-#      allow(following)
-#        .to receive(:follows_relations)
-#        .and_return [relation]
-#
-#      following
-#    end
-#    let!(:following_work_package3) do
-#      following = FactoryGirl.build_stubbed(:work_package)
-#
-#      relation = FactoryGirl.build(:follows_relation,
-#                                   from: following,
-#                                   to: work_package)
-#
-#      allow(following)
-#        .to receive(:follows_relations)
-#        .and_return [relation]
-#
-#      following
-#    end
-#    let!(:following_work_package4) do
-#      following = FactoryGirl.build_stubbed(:work_package)
-#
-#      relation1 = FactoryGirl.build(:follows_relation,
-#                                    from: following,
-#                                    to: following_work_package2)
-#
-#      relation2 = FactoryGirl.build(:follows_relation,
-#                                    from: following,
-#                                    to: following_work_package3)
-#
-#      allow(following)
-#        .to receive(:follows_relations)
-#        .and_return [relation1, relation2]
-#
-#      following
-#    end
-#    let(:following) do
-#      {
-#        work_package => [following_work_package1, following_work_package3],
-#        [following_work_package1, following_work_package3] => [following_work_package2, following_work_package4],
-#        [following_work_package2, following_work_package4] => [following_work_package4],
-#        [following_work_package4] => []
-#      }
-#    end
-#
-#    it_behaves_like 'yields the following work packages and the min date in the correct order' do
-#      let(:expected) do
-#        [[following_work_package1, Date.today + 1.day],
-#         [following_work_package3, Date.today + 1.day],
-#         [following_work_package2, Date.today + 7.days],
-#         [following_work_package4, Date.today + 8.days]]
-#      end
-#    end
-#  end
-#
-#  context 'with a successor having a parent and a sibling' do
-#    let!(:following_work_package) do
-#      following = FactoryGirl.build_stubbed(:work_package,
-#                                            subject: 'following',
-#                                            start_date: Date.today + 5.days,
-#                                            due_date: Date.today + 10.days)
-#
-#      follows_relation = FactoryGirl.build(:follows_relation,
-#                                           from: following,
-#                                           to: work_package)
-#
-#      allow(following)
-#        .to receive(:follows_relations)
-#        .and_return [follows_relation]
-#
-#      parent_relation = FactoryGirl.build(:hierarchy_relation,
-#                                          from: following_parent_work_package,
-#                                          to: following)
-#
-#      allow(following)
-#        .to receive(:parent_relation)
-#        .and_return parent_relation
-#
-#      following
-#    end
-#    let!(:following_parent_work_package) do
-#      FactoryGirl.build_stubbed(:work_package,
-#                                subject: 'following_parent',
-#                                start_date: Date.today + 5.days,
-#                                due_date: Date.today + 14.days)
-#    end
-#    let!(:following_sibling_work_package) do
-#      sibling = FactoryGirl.build_stubbed(:work_package,
-#                                          subject: 'following_sibling',
-#                                          start_date: Date.today + 8.days,
-#                                          due_date: Date.today + 14.days)
-#
-#      parent_relation = FactoryGirl.build(:hierarchy_relation,
-#                                          from: following_parent_work_package,
-#                                          to: sibling)
-#
-#      allow(sibling)
-#        .to receive(:parent_relation)
-#        .and_return parent_relation
-#
-#      sibling
-#    end
-#    let(:following) do
-#      {
-#        work_package => [following_work_package, following_sibling_work_package, following_parent_work_package],
-#        [following_work_package, following_parent_work_package] => []
-#      }
-#    end
-#
-#    it_behaves_like 'yields the following work packages and the min date in the correct order' do
-#      let(:expected) do
-#        [[following_work_package, [Date.today + 1.day, nil], [Date.today + 1.day, nil]],
-#         [following_parent_work_package, [Date.today + 1.day, Date.today + 8.days], [Date.today + 6.days, Date.today + 14.days]]]
-#      end
-#    end
-#  end
+
+  context 'with a chain of successors with two paths leading to the same work package in the end' do
+    let(:follower3_start_date) { Date.today + 4.day }
+    let(:follower3_due_date) { Date.today + 7.day }
+    let(:follower3_delay) { 0 }
+    let(:following_work_package3) do
+      stub_follower(follower3_start_date,
+                    follower3_due_date,
+                    work_package => follower3_delay)
+    end
+    let(:follower4_start_date) { Date.today + 9.days }
+    let(:follower4_due_date) { Date.today + 10.days }
+    let(:follower4_delay_2) { 0 }
+    let(:follower4_delay_3) { 0 }
+    let(:following_work_package4) do
+      stub_follower(follower4_start_date,
+                    follower4_due_date,
+                    following_work_package2 => follower4_delay_2,
+                    following_work_package3 => follower4_delay_3)
+    end
+    let(:following) do
+      {
+        work_package => [following_work_package1,
+                         following_work_package2,
+                         following_work_package3,
+                         following_work_package4],
+        [following_work_package1,
+         following_work_package2,
+         following_work_package3,
+         following_work_package4] => []
+      }
+    end
+
+    before do
+      following_work_package1
+      following_work_package2
+      following_work_package3
+      following_work_package4
+    end
+
+    context 'moving forward' do
+      before do
+        work_package.due_date = Date.today + 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today + 6.days, Date.today + 8.days],
+            following_work_package2 => [Date.today + 9.days, Date.today + 13.days],
+            following_work_package3 => [Date.today + 6.days, Date.today + 9.days],
+            following_work_package4 => [Date.today + 14.days, Date.today + 15.days] }
+        end
+      end
+    end
+
+    context 'moving backwards' do
+      before do
+        work_package.due_date = Date.today - 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [Date.today - 4.days, Date.today - 2.days],
+            following_work_package2 => [Date.today - 1.days, Date.today + 3.days],
+            following_work_package3 => [Date.today - 1.days, Date.today + 2.days],
+            following_work_package4 => [Date.today + 4.days, Date.today + 5.days] }
+        end
+      end
+    end
+  end
 end

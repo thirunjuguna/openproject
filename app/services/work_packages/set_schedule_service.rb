@@ -76,7 +76,7 @@ class WorkPackages::SetScheduleService
     WorkPackages::ScheduleDependency.new(work_package).each do |scheduled, dependency|
       reschedule(scheduled, dependency)
 
-      altered << scheduled
+      altered << scheduled if scheduled.changed?
     end
 
     altered
