@@ -28,9 +28,6 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-# Currently this is only a stub.
-# The intend for this service is for it to include all the vast scheduling rules that make up the work package scheduling.
-
 class WorkPackages::SetScheduleService
   include Concerns::Contracted
 
@@ -65,36 +62,64 @@ class WorkPackages::SetScheduleService
            :start_date_was,
            to: :work_package
 
+  # Finds all work packages that need to be rescheduled because of a rescheduling of the service's work package
+  # and reschedules them.
+  # The order of the rescheduling is important as successors' dates are calculated based on their predecessors' dates and
+  # ancestors' dates based on their childrens' dates.
+  # Thus, the work packages following (having a follows relation, direct or transitively) the service's work package
+  # are first all loaded, and then sorted by their need to be scheduled before one another:
+  # - predecessors are scheduled before their successors
+  # - children/descendants are scheduled before their parents/ancestors
   def schedule_following
-    delta = date_rescheduling_delta
-
     altered = []
 
-    WorkPackages::ScheduleDependency.new(work_package).each do |following, min_date, start_date, due_date|
-      if min_date && start_date || min_date && due_date
-        raise 'INVALID'
-      end
+    WorkPackages::ScheduleDependency.new(work_package).each do |scheduled, dependency|
+      reschedule(scheduled, dependency)
 
-      # TODO: handle reducing space between two work packages connected
-      # via a follows where more days are left than the delay requires when
-      # moving the predecessor backwards
-      if start_date && due_date
-        following.start_date = start_date
-        following.due_date = due_date
-      elsif min_date && following.start_date + delta < min_date
-        min_delta = min_date - following.start_date
-
-        following.start_date += min_delta
-        following.due_date += min_delta
-      else
-        following.start_date += delta
-        following.due_date += delta
-      end
-
-      altered << following
+      altered << scheduled
     end
 
-    altered.uniq
+    altered
+  end
+
+  # Schedules work packages based on either
+  #  - their descendants if they are parents
+  #  - their predecessors (or predecessors of their ancestors) if they are leaves
+  def reschedule(scheduled, dependency)
+    #to_schedule = schedule.work_package
+
+    if dependency.descendants.any?
+      reschedule_ancestor(scheduled, dependency)
+    else
+      reschedule_by_follows(scheduled, dependency)
+    end
+  end
+
+  # Inherits the start/due_date from the descendants of this work package. Only parent work packages are scheduled like this.
+  # start_date receives the minimum of the dates (start_date and due_date) of the descendants
+  # due_date receives the maximum of the dates (start_date and due_date) of the descendants
+  def reschedule_ancestor(scheduled, dependency)
+    scheduled.start_date = dependency.start_date
+    scheduled.due_date = dependency.due_date
+  end
+
+  # Calculates the dates of a work package based on its follows relations. The follows relations of
+  # ancestors are considered to be equal to own follows relations as they inhibit moving a work package
+  # just the same. Only leaf work packages are calculated like this.
+  # * work package is moved to a later date (delta positive):
+  #  - all following work packages are moved by the same amount unless there is still a time buffer between work package and
+  #    its predecessors (predecessors can also be acquired transitively by ancestors)
+  # * work package moved to an earlier date (delta negative):
+  #  - all following work packages are moved by the same amount unless a follows relation of the work package or one of its
+  #    ancestors limits moving it. Then it is moved to the earliest date possible. This limitation is propagated transtitively
+  #    to all following work packages.
+  def reschedule_by_follows(scheduled, dependency)
+    delta = date_rescheduling_delta
+
+    required_delta = [dependency.max_date_of_followed - scheduled.start_date, [delta, 0].min].max
+
+    scheduled.start_date += required_delta
+    scheduled.due_date += required_delta
   end
 
   def date_rescheduling_delta
@@ -105,22 +130,5 @@ class WorkPackages::SetScheduleService
     else
       0
     end
-  end
-
-  def reschedule(following, start_boundary, due_boundary, delta)
-    following.start_date += delta
-    following.due_date += delta
-
-    binding.pry if following.subject == 'following3_parent'
-    binding.pry if following.subject == 'following3'
-
-    if start_boundary.min && following.start_date < start_boundary.min
-      min_delta = min_date - following.start_date
-
-      following.start_date += min_delta
-      following.due_date += min_delta
-    end
-
-    following
   end
 end

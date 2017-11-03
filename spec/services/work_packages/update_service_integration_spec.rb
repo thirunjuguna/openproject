@@ -446,6 +446,7 @@ describe WorkPackages::UpdateService, 'integration tests', type: :model do
       end
       let(:following3_sibling_attributes) do
         work_package_attributes.merge(parent: following3_parent_work_package,
+                                      subject: 'following3_sibling',
                                       start_date: Date.today + 32.days,
                                       due_date: Date.today + 36.days)
       end
