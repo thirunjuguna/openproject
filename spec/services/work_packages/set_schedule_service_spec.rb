@@ -43,6 +43,62 @@ describe WorkPackages::SetScheduleService do
   end
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:type) { FactoryGirl.build_stubbed(:type) }
+  let(:follower_start_date) { Date.today + 1.day }
+  let(:follower_due_date) { Date.today + 3.day }
+  let(:follower_delay) { 0 }
+  let(:following_work_package1) do
+    following = FactoryGirl.build_stubbed(:work_package,
+                                          type: type,
+                                          start_date: follower_start_date,
+                                          due_date: follower_due_date)
+
+    relation = FactoryGirl.build(:follows_relation,
+                                 delay: follower_delay,
+                                 from: following,
+                                 to: work_package)
+
+    allow(following)
+      .to receive(:follows_relations)
+      .and_return [relation]
+
+    following
+  end
+  let(:follower2_start_date) { Date.today + 4.day }
+  let(:follower2_due_date) { Date.today + 8.day }
+  let(:following_work_package2) do
+    following = FactoryGirl.build_stubbed(:work_package,
+                                          type: type,
+                                          start_date: follower2_start_date,
+                                          due_date: follower2_due_date)
+
+    relation = FactoryGirl.build(:follows_relation,
+                                 from: following,
+                                 to: following_work_package1)
+
+    allow(following)
+      .to receive(:follows_relations)
+      .and_return [relation]
+
+    following
+  end
+  let(:follower3_start_date) { Date.today + 9.day }
+  let(:follower3_due_date) { Date.today + 10.day }
+  let(:following_work_package3) do
+    following = FactoryGirl.build_stubbed(:work_package,
+                                          type: type,
+                                          start_date: follower3_start_date,
+                                          due_date: follower3_due_date)
+
+    relation = FactoryGirl.build(:follows_relation,
+                                 from: following,
+                                 to: following_work_package2)
+
+    allow(following)
+      .to receive(:follows_relations)
+      .and_return [relation]
+
+    following
+  end
 
   subject { instance.call(attributes) }
 
@@ -68,31 +124,15 @@ describe WorkPackages::SetScheduleService do
   end
 
   context 'with a single successor' do
-    let(:follower_start_date) { Date.today + 1.day }
-    let(:follower_due_date) { Date.today + 3.day }
-    let(:follower_delay) { 0 }
-    let!(:following_work_package) do
-      following = FactoryGirl.build_stubbed(:work_package,
-                                            type: type,
-                                            start_date: follower_start_date,
-                                            due_date: follower_due_date)
-
-      relation = FactoryGirl.build(:follows_relation,
-                                   delay: follower_delay,
-                                   from: following,
-                                   to: work_package)
-
-      allow(following)
-        .to receive(:follows_relations)
-        .and_return [relation]
-
-      following
-    end
     let(:following) do
       {
-        work_package => [following_work_package],
-        [following_work_package] => []
+        work_package => [following_work_package1],
+        [following_work_package1] => []
       }
+    end
+
+    before do
+      following_work_package1
     end
 
     context 'moving forward' do
@@ -107,9 +147,9 @@ describe WorkPackages::SetScheduleService do
 
       it 'reschedules the follower' do
         subject
-        expect(following_work_package.start_date)
+        expect(following_work_package1.start_date)
           .to eql Date.today + 6.day
-        expect(following_work_package.due_date)
+        expect(following_work_package1.due_date)
           .to eql Date.today + 8.day
       end
     end
@@ -129,9 +169,9 @@ describe WorkPackages::SetScheduleService do
 
       it 'reschedules the follower' do
         subject
-        expect(following_work_package.start_date)
+        expect(following_work_package1.start_date)
           .to eql Date.today + 6.day
-        expect(following_work_package.due_date)
+        expect(following_work_package1.due_date)
           .to eql Date.today + 8.day
       end
     end
@@ -152,9 +192,9 @@ describe WorkPackages::SetScheduleService do
 
       it 'reschedules the follower' do
         subject
-        expect(following_work_package.start_date)
+        expect(following_work_package1.start_date)
           .to eql Date.today + 9.day
-        expect(following_work_package.due_date)
+        expect(following_work_package1.due_date)
           .to eql Date.today + 11.day
       end
     end
@@ -174,9 +214,9 @@ describe WorkPackages::SetScheduleService do
 
       it 'reschedules the follower' do
         subject
-        expect(following_work_package.start_date)
+        expect(following_work_package1.start_date)
           .to eql Date.today + 6.day
-        expect(following_work_package.due_date)
+        expect(following_work_package1.due_date)
           .to eql Date.today + 8.day
       end
     end
@@ -193,9 +233,9 @@ describe WorkPackages::SetScheduleService do
 
       it 'reschedules the follower' do
         subject
-        expect(following_work_package.start_date)
+        expect(following_work_package1.start_date)
           .to eql Date.today - 4.day
-        expect(following_work_package.due_date)
+        expect(following_work_package1.due_date)
           .to eql Date.today - 2.day
       end
     end
@@ -215,9 +255,9 @@ describe WorkPackages::SetScheduleService do
 
       it 'reschedules the follower' do
         subject
-        expect(following_work_package.start_date)
+        expect(following_work_package1.start_date)
           .to eql Date.today - 2.days
-        expect(following_work_package.due_date)
+        expect(following_work_package1.due_date)
           .to eql Date.today
       end
     end
@@ -231,54 +271,6 @@ describe WorkPackages::SetScheduleService do
     let(:follower3_start_date) { Date.today + 9.day }
     let(:follower3_due_date) { Date.today + 10.day }
 
-    let!(:following_work_package1) do
-      following = FactoryGirl.build_stubbed(:work_package,
-                                            type: type,
-                                            start_date: follower1_start_date,
-                                            due_date: follower1_due_date)
-
-      relation = FactoryGirl.build(:follows_relation,
-                                   from: following,
-                                   to: work_package)
-
-      allow(following)
-        .to receive(:follows_relations)
-        .and_return [relation]
-
-      following
-    end
-    let!(:following_work_package2) do
-      following = FactoryGirl.build_stubbed(:work_package,
-                                            type: type,
-                                            start_date: follower2_start_date,
-                                            due_date: follower2_due_date)
-
-      relation = FactoryGirl.build(:follows_relation,
-                                   from: following,
-                                   to: following_work_package1)
-
-      allow(following)
-        .to receive(:follows_relations)
-        .and_return [relation]
-
-      following
-    end
-    let!(:following_work_package3) do
-      following = FactoryGirl.build_stubbed(:work_package,
-                                            type: type,
-                                            start_date: follower3_start_date,
-                                            due_date: follower3_due_date)
-
-      relation = FactoryGirl.build(:follows_relation,
-                                   from: following,
-                                   to: following_work_package2)
-
-      allow(following)
-        .to receive(:follows_relations)
-        .and_return [relation]
-
-      following
-    end
     let(:following) do
       {
         work_package => [following_work_package1,
@@ -288,6 +280,12 @@ describe WorkPackages::SetScheduleService do
          following_work_package2,
          following_work_package3] => []
       }
+    end
+
+    before do
+      following_work_package1
+      following_work_package2
+      following_work_package3
     end
 
     context 'moving forward' do
