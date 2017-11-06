@@ -356,8 +356,7 @@ describe WorkPackages::SetScheduleService do
                            parent_work_package,
                            follower_sibling_work_package],
           [following_work_package1,
-           parent_work_package,
-           follower_sibling_work_package] => []
+           parent_work_package] => []
         }
       end
 
@@ -470,8 +469,7 @@ describe WorkPackages::SetScheduleService do
                            parent_work_package,
                            follower_sibling_work_package],
           [following_work_package1,
-           parent_work_package,
-           follower_sibling_work_package] => []
+           parent_work_package] => []
         }
       end
 

@@ -52,8 +52,6 @@ class WorkPackages::UpdateInheritedAttributesService
   private
 
   def inherit_attributes(attributes)
-    inherit_dates_from_children if (%i(start_date due_date) & attributes).any?
-
     inherit_done_ratio_from_leaves if (%i(estimated_hours done_ratio) & attributes).any?
 
     inherit_estimated_hours_from_leaves if attributes.include?(:estimated_hours)
@@ -62,19 +60,6 @@ class WorkPackages::UpdateInheritedAttributesService
       work_package.journal_notes =
         I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
     end
-  end
-
-  def inherit_dates_from_children
-    # using min and max instead of minimum and maximum here
-    # as the later go to the db (4 times)
-    children = work_package.children.pluck(:start_date, :due_date)
-
-    return if children.empty?
-
-    dates = children.flatten.compact
-
-    work_package.start_date = dates.min
-    work_package.due_date   = dates.max
   end
 
   def inherit_done_ratio_from_leaves
@@ -118,7 +103,7 @@ class WorkPackages::UpdateInheritedAttributesService
     * (CASE WHEN is_closed = #{work_package.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)
     SQL
 
-    work_package.leaves.joins(:status).sum(sum_sql)
+    work_package.leaves.distinct(false).joins(:status).sum(sum_sql)
   end
 
   def inherit_estimated_hours_from_leaves

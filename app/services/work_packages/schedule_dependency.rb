@@ -32,6 +32,7 @@ class WorkPackages::ScheduleDependency
   def initialize(work_package)
     self.work_package = work_package
     self.dependencies = {}
+    self.known_work_packages = [work_package]
 
     build_dependencies
   end
@@ -56,7 +57,8 @@ class WorkPackages::ScheduleDependency
   end
 
   attr_accessor :work_package,
-                :dependencies
+                :dependencies,
+                :known_work_packages
 
   private
 
@@ -66,6 +68,9 @@ class WorkPackages::ScheduleDependency
 
   def load_all_following(work_packages)
     following = load_following(work_packages)
+
+    self.known_work_packages += following
+    known_work_packages.uniq!
 
     new_dependencies = add_dependencies(following)
 
@@ -81,20 +86,20 @@ class WorkPackages::ScheduleDependency
                 follows_relations: :to)
   end
 
-  def find_unmoved(candidates)
-    moved = dependencies.slice(*candidates.keys).select do |following, dependency|
-      dependency.ancestors.any? { |ancestor| included_in_follows(ancestor) } ||
-        dependency.descendants.any? { |descendant| included_in_follows(descendant) } ||
-        included_in_follows(following)
+  def find_moved(candidates)
+    candidates.select do |following, dependency|
+      dependency.ancestors.any? { |ancestor| included_in_follows?(ancestor, candidates) } ||
+        dependency.descendants.any? { |descendant| included_in_follows?(descendant, candidates) } ||
+        dependency.descendants.any? { |descendant| descendant == work_package } ||
+        included_in_follows?(following, candidates)
     end
-
-    candidates.keys - moved.keys
   end
 
-  def included_in_follows(wp)
+  def included_in_follows?(wp, candidates)
     tos = wp.follows_relations.map(&:to)
 
     dependencies.slice(*tos).any? ||
+      candidates.slice(*tos).any? ||
       tos.include?(work_package)
   end
 
@@ -107,16 +112,13 @@ class WorkPackages::ScheduleDependency
       new_dependencies
     end
 
-    dependencies.merge!(added)
-    unmoved = find_unmoved(added)
+    moved = find_moved(added)
 
-    unmoved.each do |to_delete|
-      dependencies.delete(to_delete)
-    end
+    newly_added = moved.except(*dependencies.keys)
 
-    added.delete(unmoved)
+    dependencies.merge!(moved)
 
-    added
+    newly_added
   end
 
   class Dependency
@@ -136,13 +138,13 @@ class WorkPackages::ScheduleDependency
     def follows_moved
       tree = ancestors + descendants
 
-      @follows_moved ||= moved_predecessors_from_preloaded(work_package, known_work_packages, tree)
+      @follows_moved ||= moved_predecessors_from_preloaded(work_package, tree)
     end
 
     def follows_unmoved
       tree = ancestors + descendants
 
-      @follows_unmoved ||= unmoved_predecessors_from_preloaded(work_package, known_work_packages, tree)
+      @follows_unmoved ||= unmoved_predecessors_from_preloaded(work_package, tree)
     end
 
     attr_accessor :work_package,
@@ -170,7 +172,7 @@ class WorkPackages::ScheduleDependency
     private
 
     def descendants_dates
-      descendants.map(&:due_date) + descendants.map(&:start_date)
+      (descendants.map(&:due_date) + descendants.map(&:start_date)).compact
     end
 
     def ancestors_from_preloaded(work_package)
@@ -192,30 +194,34 @@ class WorkPackages::ScheduleDependency
     end
 
     def known_work_packages
+      schedule_dependency.known_work_packages
+    end
+
+    def scheduled_work_packages
       [schedule_dependency.work_package] + schedule_dependency.dependencies.keys
     end
 
-    def moved_predecessors_from_preloaded(work_package, moved, tree)
-      moved_predecessors = ([work_package] + tree)
-                           .map(&:follows_relations)
-                           .flatten
-                           .select do |relation|
-                             moved.detect { |c| relation.to_id == c.id }
-                           end
+    def moved_predecessors_from_preloaded(work_package, tree)
+      ([work_package] + tree)
+        .map(&:follows_relations)
+        .flatten
+        .map do |relation|
+          scheduled = scheduled_work_packages.detect { |c| relation.to_id == c.id }
 
-      moved_predecessors.each do |relation|
-        relation.to = moved.detect { |c| relation.to_id == c.id }
-      end
-
-      moved_predecessors
+          if scheduled
+            relation.to = scheduled
+            relation
+          end
+        end
+        .compact
     end
 
-    def unmoved_predecessors_from_preloaded(work_package, moved, tree)
+    def unmoved_predecessors_from_preloaded(work_package, tree)
       ([work_package] + tree)
         .map(&:follows_relations)
         .flatten
         .reject do |relation|
-          moved.any? { |m| relation.to_id == m.id }
+          scheduled_work_packages.any? { |m| relation.to_id == m.id }
         end
     end
   end

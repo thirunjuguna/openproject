@@ -565,7 +565,7 @@ class WorkPackage < ActiveRecord::Base
   def self.hierarchy_tree_following(work_packages)
     following = Relation
                 .where(to: work_packages)
-                .follows_with_hierarchy_accepted
+                .hierarchy_or_follows
                 .select(:from_id)
 
     WorkPackage

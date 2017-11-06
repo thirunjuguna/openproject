@@ -121,9 +121,9 @@ class Relation < ActiveRecord::Base
       .or(where(from_id: work_package.id))
   end
 
-  def self.follows_with_hierarchy_accepted
+  def self.hierarchy_or_follows
     with_type_colums_0(WorkPackage._dag_options.type_columns - %i(hierarchy follows))
-      .where('follows > 0')
+      .non_reflexive
   end
 
   def relation_type=(type)
@@ -187,10 +187,6 @@ class Relation < ActiveRecord::Base
     end
     set_dates_of_target
   end
-
-  #def move_target_dates_by(delta)
-  #  from.reschedule_by(delta) if relation_type == TYPE_FOLLOWS
-  #end
 
   def set_dates_of_target
     soonest_start = successor_soonest_start
