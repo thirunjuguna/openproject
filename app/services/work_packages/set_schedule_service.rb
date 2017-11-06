@@ -31,15 +31,13 @@
 class WorkPackages::SetScheduleService
   include Concerns::Contracted
 
-  attr_accessor :user, :work_package
+  attr_accessor :user, :work_packages
 
   self.contract = WorkPackages::UpdateContract
 
-  def initialize(user:, work_package:)
+  def initialize(user:, work_packages:)
     self.user = user
-    self.work_package = work_package
-
-    self.contract = self.class.contract.new(work_package, user)
+    self.work_packages = work_packages
   end
 
   def call(attributes)
@@ -49,18 +47,18 @@ class WorkPackages::SetScheduleService
                 []
               end
 
-    ServiceResult.new(success: altered.all?(&:valid?),
+    ServiceResult.new(success: all_valid?(altered),
                       errors: altered.map(&:errors),
                       result: altered)
   end
 
   private
 
-  delegate :due_date,
-           :due_date_was,
-           :start_date,
-           :start_date_was,
-           to: :work_package
+  def all_valid?(altered)
+    altered.map do |wp|
+      self.class.contract.new(wp, user)
+    end.all?(&:valid?)
+  end
 
   # Finds all work packages that need to be rescheduled because of a rescheduling of the service's work package
   # and reschedules them.
@@ -73,7 +71,7 @@ class WorkPackages::SetScheduleService
   def schedule_following
     altered = []
 
-    WorkPackages::ScheduleDependency.new(work_package).each do |scheduled, dependency|
+    WorkPackages::ScheduleDependency.new(work_packages).each do |scheduled, dependency|
       reschedule(scheduled, dependency)
 
       altered << scheduled if scheduled.changed?
@@ -114,7 +112,8 @@ class WorkPackages::SetScheduleService
   #    ancestors limits moving it. Then it is moved to the earliest date possible. This limitation is propagated transtitively
   #    to all following work packages.
   def reschedule_by_follows(scheduled, dependency)
-    delta = date_rescheduling_delta
+    # TODO: move into schedule dependency
+    delta = date_rescheduling_delta(dependency.follows_moved.first.to)
 
     required_delta = [dependency.max_date_of_followed - scheduled.start_date, [delta, 0].min].max
 
@@ -122,11 +121,11 @@ class WorkPackages::SetScheduleService
     scheduled.due_date += required_delta
   end
 
-  def date_rescheduling_delta
-    if due_date.present?
-      due_date - (due_date_was || due_date)
-    elsif start_date.present?
-      start_date - (start_date_was || start_date)
+  def date_rescheduling_delta(predecessor)
+    if predecessor.due_date.present?
+      predecessor.due_date - (predecessor.due_date_was || predecessor.due_date)
+    elsif predecessor.start_date.present?
+      predecessor.start_date - (predecessor.start_date_was || predecessor.start_date)
     else
       0
     end

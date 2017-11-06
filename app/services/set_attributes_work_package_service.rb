@@ -54,7 +54,8 @@ class SetAttributesWorkPackageService
     boolean, errors = validate(work_package)
 
     ServiceResult.new(success: boolean,
-                      errors: errors)
+                      errors: errors,
+                      result: work_package)
   end
 
   def set_attributes(attributes)
@@ -65,15 +66,7 @@ class SetAttributesWorkPackageService
     # Take over any default custom values
     # for new custom fields
     work_package.set_default_values! if custom_field_context_changed?
-
-    #reschedule(attributes)
   end
-
-  #def reschedule(attributes)
-  #  ScheduleWorkPackageService
-  #    .new(user: user, work_package: work_package)
-  #    .call(attributes: attributes)
-  #end
 
   def unify_dates
     unified_date = work_package.due_date || work_package.start_date

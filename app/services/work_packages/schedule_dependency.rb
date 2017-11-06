@@ -29,10 +29,10 @@
 #++
 
 class WorkPackages::ScheduleDependency
-  def initialize(work_package)
-    self.work_package = work_package
+  def initialize(work_packages)
+    self.work_packages = Array(work_packages)
     self.dependencies = {}
-    self.known_work_packages = [work_package]
+    self.known_work_packages = self.work_packages
 
     build_dependencies
   end
@@ -56,14 +56,14 @@ class WorkPackages::ScheduleDependency
     end
   end
 
-  attr_accessor :work_package,
+  attr_accessor :work_packages,
                 :dependencies,
                 :known_work_packages
 
   private
 
   def build_dependencies
-    load_all_following(work_package)
+    load_all_following(work_packages)
   end
 
   def load_all_following(work_packages)
@@ -90,7 +90,7 @@ class WorkPackages::ScheduleDependency
     candidates.select do |following, dependency|
       dependency.ancestors.any? { |ancestor| included_in_follows?(ancestor, candidates) } ||
         dependency.descendants.any? { |descendant| included_in_follows?(descendant, candidates) } ||
-        dependency.descendants.any? { |descendant| descendant == work_package } ||
+        dependency.descendants.any? { |descendant| work_packages.include?(descendant) } ||
         included_in_follows?(following, candidates)
     end
   end
@@ -100,7 +100,7 @@ class WorkPackages::ScheduleDependency
 
     dependencies.slice(*tos).any? ||
       candidates.slice(*tos).any? ||
-      tos.include?(work_package)
+      (tos & work_packages).any?
   end
 
   def add_dependencies(dependent_work_packages)
@@ -198,7 +198,7 @@ class WorkPackages::ScheduleDependency
     end
 
     def scheduled_work_packages
-      [schedule_dependency.work_package] + schedule_dependency.dependencies.keys
+      schedule_dependency.work_packages + schedule_dependency.dependencies.keys
     end
 
     def moved_predecessors_from_preloaded(work_package, tree)

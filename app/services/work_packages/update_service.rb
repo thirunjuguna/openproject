@@ -176,7 +176,7 @@ class WorkPackages::UpdateService
   def reschedule_related
     WorkPackages::SetScheduleService
       .new(user: user,
-           work_package: work_package)
+           work_packages: work_package)
       .call(work_package.changed.map(&:to_sym))
   end
 

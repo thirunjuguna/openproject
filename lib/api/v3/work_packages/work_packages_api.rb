@@ -95,7 +95,7 @@ module API
             patch do
               write_work_package_attributes(@work_package, request_body, reset_lock_version: true)
 
-              call = UpdateWorkPackageService
+              call = ::WorkPackages::UpdateService
                      .new(
                        user: current_user,
                        work_package: @work_package
