@@ -100,8 +100,6 @@ class Relation < ActiveRecord::Base
   before_save :set_type_column
   before_save :update_schedule
 
-  attr_accessor :relation_type
-
   def self.relation_column(type)
     if TYPES.key?(type) && TYPES[type][:reverse]
       TYPES[type][:reverse]
@@ -124,6 +122,12 @@ class Relation < ActiveRecord::Base
   def self.hierarchy_or_follows
     with_type_colums_0(WorkPackage._dag_options.type_columns - %i(hierarchy follows))
       .non_reflexive
+  end
+
+  def self.non_hierarchy_of_work_package(work_package)
+    of_work_package(work_package)
+      .non_hierarchy
+      .direct
   end
 
   def relation_type=(type)

@@ -114,7 +114,10 @@ module Api
 
       def destroy
         @planning_element = WorkPackage.find(params[:id])
-        @planning_element.destroy
+        WorkPackages::DestroyService
+          .new(user: current_user,
+               work_package: @planning_element)
+          .call
 
         respond_to do |format|
           format.api

@@ -50,16 +50,6 @@ describe 'IssueNestedSet', type: :model do
     refute_empty child.errors[:parent]
   end
 
-  it 'should destroy parent work package updated during children destroy' do
-    parent = create_issue!
-    create_issue!(start_date: Date.today, parent: parent)
-    create_issue!(start_date: 2.days.from_now, parent: parent)
-
-    assert_difference 'WorkPackage.count', -3 do
-      WorkPackage.find(parent.id).destroy
-    end
-  end
-
   it 'should move parent updates old parent attributes' do
     first_parent = create_issue!
     second_parent = create_issue!

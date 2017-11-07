@@ -71,7 +71,7 @@ describe WorkPackages::UpdateService, type: :model do
 
       instance
     end
-    let(:errors) { double('errors') }
+    let(:errors) { double('errors', empty?: true) }
     let(:set_service_results) { double('result', success?: true, errors: errors) }
     let(:work_package_save_result) { true }
 
@@ -112,7 +112,7 @@ describe WorkPackages::UpdateService, type: :model do
       end
 
       context 'when setting the attributes is unsuccessful (invalid)' do
-        let(:errors) { double('errors') }
+        let(:errors) { double('errors', empty?: false) }
         let(:set_service_results) { double('result', success?: false, errors: errors) }
 
         it 'is unsuccessful' do
@@ -128,7 +128,7 @@ describe WorkPackages::UpdateService, type: :model do
         it 'exposes the errors' do
           subject
 
-          expect(subject.errors).to eql errors
+          expect(subject.errors).to match_array [errors]
         end
       end
 
@@ -146,14 +146,14 @@ describe WorkPackages::UpdateService, type: :model do
         end
 
         it "exposes the work_packages's errors" do
-          saving_errors = double('saving_errors')
+          saving_errors = double('saving_errors', empty?: false)
           allow(work_package)
             .to receive(:errors)
             .and_return(saving_errors)
 
           subject
 
-          expect(subject.errors).to eql saving_errors
+          expect(subject.errors).to eql [saving_errors]
         end
       end
     end
@@ -190,11 +190,13 @@ describe WorkPackages::UpdateService, type: :model do
           allow(Setting)
             .to receive(:cross_project_work_package_relations?)
             .and_return false
-          expect(work_package)
-            .to receive_message_chain(:relations,
-                                      :non_hierarchy,
-                                      :direct,
-                                      :destroy_all)
+          relations = double('relations')
+          expect(Relation)
+            .to receive(:non_hierarchy_of_work_package)
+            .with([work_package])
+            .and_return(relations)
+          expect(relations)
+            .to receive(:destroy_all)
 
           instance.call(attributes: { project: target_project })
         end
@@ -214,9 +216,16 @@ describe WorkPackages::UpdateService, type: :model do
 
       context 'time_entries' do
         it 'moves the time entries' do
-          expect(work_package)
-            .to receive(:move_time_entries)
-            .with(target_project)
+          scope = double('scope')
+
+          expect(TimeEntry)
+            .to receive(:on_work_packages)
+            .with([work_package])
+            .and_return(scope)
+
+          expect(scope)
+            .to receive(:update_all)
+            .with(project_id: target_project)
 
           instance.call(attributes: { project: target_project })
         end
@@ -229,7 +238,7 @@ describe WorkPackages::UpdateService, type: :model do
                                                          project: project)
 
           allow(work_package)
-            .to receive(:children)
+            .to receive(:descendants)
             .and_return [child_work_package]
 
           child_work_package
@@ -240,42 +249,48 @@ describe WorkPackages::UpdateService, type: :model do
         end
 
         let(:child_service) do
-          double('WorkPackages::UpdateChildService')
+          double('WorkPackages::SetProjectAndDependentAttributesService')
         end
 
-        it 'calls the service again with the same attributes for each child' do
-          expect(WorkPackages::UpdateChildService)
+        let(:child_service_success) do
+          true
+        end
+        let(:child_service_errors) do
+          double('child service errors', empty?: child_service_success)
+        end
+
+        before do
+          expect(WorkPackages::SetProjectAndDependentAttributesService)
             .to receive(:new)
             .with(user: user,
-                  work_package: child_work_package)
+                  work_package: child_work_package,
+                  contract: WorkPackages::UpdateContract)
             .and_return child_service
 
           expect(child_service)
             .to receive(:call)
-            .with(attributes)
-            .and_return true
-
-          instance.call(attributes)
+            .with(target_project)
+            .and_return ServiceResult.new success: child_service_success, errors: child_service_errors
         end
 
-        it 'returns errors of the child service calls and returns false' do
-          expect(WorkPackages::UpdateChildService)
-            .to receive(:new)
-            .with(user: user,
-                  work_package: child_work_package)
-            .and_return child_service
+        context 'when the child service is successful' do
+          it 'is successful' do
+            expect(instance.call(attributes))
+              .to be_success
+          end
+        end
 
-          errors = double('child service errors')
+        context 'when the child service is not successful' do
+          let(:child_service_success) do
+            false
+          end
 
-          expect(child_service)
-            .to receive(:call)
-            .with(attributes)
-            .and_return [false, errors]
+          it 'returns errors of the child service calls and returns false' do
+            result = instance.call(attributes)
 
-          result = instance.call(attributes)
-
-          expect(result.success?).to be_falsey
-          expect(result.errors).to eql errors
+            expect(result).not_to be_success
+            expect(result.errors).to match_array [child_service_errors]
+          end
         end
       end
     end

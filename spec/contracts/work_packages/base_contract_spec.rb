@@ -133,7 +133,7 @@ describe WorkPackages::BaseContract do
     context 'before soonest start date of parent' do
       before do
         work_package.parent = FactoryGirl.build_stubbed(:work_package)
-        allow(work_package.parent)
+        allow(work_package)
           .to receive(:soonest_start)
           .and_return(Date.today + 4.days)
 
@@ -143,7 +143,7 @@ describe WorkPackages::BaseContract do
       it 'notes the error' do
         contract.validate
 
-        message = I18n.t('activerecord.errors.models.work_package.attributes.start_date.violates_parent_relationships',
+        message = I18n.t('activerecord.errors.models.work_package.attributes.start_date.violates_relationships',
                          soonest_start: Date.today + 4.days)
 
         expect(contract.errors[:start_date])

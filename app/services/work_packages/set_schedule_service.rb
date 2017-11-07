@@ -29,11 +29,7 @@
 #++
 
 class WorkPackages::SetScheduleService
-  include Concerns::Contracted
-
   attr_accessor :user, :work_packages
-
-  self.contract = WorkPackages::UpdateContract
 
   def initialize(user:, work_packages:)
     self.user = user
@@ -47,18 +43,12 @@ class WorkPackages::SetScheduleService
                 []
               end
 
-    ServiceResult.new(success: all_valid?(altered),
-                      errors: altered.map(&:errors),
+    ServiceResult.new(success: true,
+                      errors: [],
                       result: altered)
   end
 
   private
-
-  def all_valid?(altered)
-    altered.map do |wp|
-      self.class.contract.new(wp, user)
-    end.all?(&:valid?)
-  end
 
   # Finds all work packages that need to be rescheduled because of a rescheduling of the service's work package
   # and reschedules them.

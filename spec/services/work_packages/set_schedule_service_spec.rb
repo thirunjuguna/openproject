@@ -36,10 +36,10 @@ describe WorkPackages::SetScheduleService do
                               due_date: Date.today)
   end
   let(:instance) do
-    described_class.new(user: user, work_package: work_package)
+    described_class.new(user: user, work_packages: [work_package])
   end
   let(:following) do
-    { work_package => [] }
+    { [work_package] => [] }
   end
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:type) { FactoryGirl.build_stubbed(:type) }
@@ -180,7 +180,7 @@ describe WorkPackages::SetScheduleService do
   context 'with a single successor' do
     let(:following) do
       {
-        work_package => [following_work_package1],
+        [work_package] => [following_work_package1],
         [following_work_package1] => []
       }
     end
@@ -321,8 +321,8 @@ describe WorkPackages::SetScheduleService do
   context 'with a single successor having a parent' do
     let(:following) do
       {
-        work_package => [following_work_package1,
-                         parent_work_package],
+        [work_package] => [following_work_package1,
+                           parent_work_package],
         [following_work_package1,
          parent_work_package] => []
       }
@@ -352,9 +352,9 @@ describe WorkPackages::SetScheduleService do
 
       let(:following) do
         {
-          work_package => [following_work_package1,
-                           parent_work_package,
-                           follower_sibling_work_package],
+          [work_package] => [following_work_package1,
+                             parent_work_package,
+                             follower_sibling_work_package],
           [following_work_package1,
            parent_work_package] => []
         }
@@ -465,9 +465,9 @@ describe WorkPackages::SetScheduleService do
 
       let(:following) do
         {
-          work_package => [following_work_package1,
-                           parent_work_package,
-                           follower_sibling_work_package],
+          [work_package] => [following_work_package1,
+                             parent_work_package,
+                             follower_sibling_work_package],
           [following_work_package1,
            parent_work_package] => []
         }
@@ -512,8 +512,8 @@ describe WorkPackages::SetScheduleService do
 
     let(:following) do
       {
-        work_package => [following_work_package1,
-                         child_work_package],
+        [work_package] => [following_work_package1,
+                           child_work_package],
         [following_work_package1,
          child_work_package] => []
       }
@@ -548,9 +548,9 @@ describe WorkPackages::SetScheduleService do
 
     let(:following) do
       {
-        work_package => [following_work_package1,
-                         following_work_package2,
-                         following_work_package3],
+        [work_package] => [following_work_package1,
+                           following_work_package2,
+                           following_work_package3],
         [following_work_package1,
          following_work_package2,
          following_work_package3] => []
@@ -637,10 +637,10 @@ describe WorkPackages::SetScheduleService do
     end
     let(:following) do
       {
-        work_package => [following_work_package1,
-                         following_work_package2,
-                         following_work_package3,
-                         following_work_package4],
+        [work_package] => [following_work_package1,
+                           following_work_package2,
+                           following_work_package3,
+                           following_work_package4],
         [following_work_package1,
          following_work_package2,
          following_work_package3,

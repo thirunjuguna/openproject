@@ -666,28 +666,6 @@ describe WorkPackage, type: :model do
       end
     end
 
-    context 'with parent set' do
-      let(:parent) { FactoryGirl.create(:work_package) }
-      let(:work_package) { FactoryGirl.create(:work_package, parent: parent) }
-
-      it 'sets parent done_ratio from child' do
-        work_package.done_ratio = 50
-        work_package.save!
-
-        parent.reload
-        expect(parent.done_ratio).to eq(50)
-      end
-
-      it 'sets parent done_ratio from child when estimated_hours is 0' do
-        work_package.estimated_hours = 0.0
-        work_package.done_ratio = 100
-        work_package.save!
-
-        parent.reload
-        expect(parent.done_ratio).to eq(100)
-      end
-    end
-
     describe '#update_done_ratio_from_status' do
       context 'work package field' do
         before do
@@ -1073,28 +1051,6 @@ describe WorkPackage, type: :model do
 
     it 'should return an usaved entry' do
       expect(stub_work_package.add_time_entry).to be_new_record
-    end
-  end
-
-  describe '#move_time_entries' do
-    let(:time_entry) do
-      FactoryGirl.build(:time_entry,
-                        work_package: work_package,
-                        project: work_package.project)
-    end
-    let(:target_project) { FactoryGirl.build(:project) }
-
-    before do
-      time_entry.save!
-      target_project.save!
-    end
-
-    it 'moves the time_entry to the defined project' do
-      work_package.move_time_entries(target_project)
-
-      time_entry.reload
-
-      expect(time_entry.project).to eql(target_project)
     end
   end
 

@@ -49,31 +49,30 @@ module WorkPackages
                   .uniq
                   .map(&:to_sym)
 
-        update_each_ancestor(work_package, changes)
+        update_each_ancestor(work_packages, changes)
       end
 
-      def update_each_ancestor(work_package, changes)
+      def update_each_ancestor(work_packages, changes)
         modified = []
-        errors = []
+        modified_errors = []
 
-        work_package.ancestors.each do |ancestor|
+        work_packages.map(&:ancestors).flatten.each do |ancestor|
           result = inherit_to_ancestor(ancestor, changes)
 
           if result.success?
-            modified << ancestor if ancestor.changed?
+            modified_errors << ancestor if ancestor.changed?
           else
             errors << result.errors
           end
         end
 
-        [modified, errors]
+        [modified, modified_errors]
       end
 
       def inherit_to_ancestor(ancestor, changes)
         WorkPackages::UpdateInheritedAttributesService
           .new(user: user,
-               work_package: ancestor,
-               contract: WorkPackages::UpdateContract)
+               work_package: ancestor)
           .call(changes)
       end
     end

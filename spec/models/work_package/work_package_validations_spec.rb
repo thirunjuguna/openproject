@@ -54,66 +54,6 @@ describe WorkPackage, type: :model do
       expect(wp.errors[:start_date].size).to eq(0)
       expect(wp.errors[:due_date].size).to eq(0)
     end
-
-    describe 'hierarchical work_package-validations' do
-      # There are basically __no__ validations for hierarchies:
-      # The sole semantic here is, that the start-date of a parent
-      # is set to the earliest start-date of its children.
-
-      let(:early_date) { 1.week.from_now.to_date }
-      let(:late_date)  { 2.weeks.from_now.to_date }
-      let(:parent) do
-        FactoryGirl.create(:work_package, author: user, project: project, start_date: late_date)
-      end
-      let(:child_1) do
-        FactoryGirl.create(:work_package,
-                           author: user,
-                           project: project,
-                           parent: parent,
-                           start_date: late_date)
-      end
-      let(:child_2) do
-        FactoryGirl.create(:work_package,
-                           author: user,
-                           project: project,
-                           parent: parent,
-                           start_date: late_date)
-      end
-
-      it "verify, that the start-date of a parent equals the start-date of it's earliest child." do
-        child_1.start_date = early_date
-        expect(child_1).to be_valid # yes, child-start-date can moved before parent-start-date...
-        child_1.save
-
-        expect { parent.reload }
-          .to change { parent.start_date }
-          .from(late_date)
-          .to(early_date) # ... but this changes the parent's start_date to the child's start_date
-      end
-    end
-  end
-
-  describe 'validations of related packages' do
-    let(:predecessor) do
-      FactoryGirl.create(:work_package, author: user, project: project, start_date: '31/01/13')
-    end
-    let(:successor) do
-      FactoryGirl.create(:work_package, author: user, project: project, start_date: '31/01/13')
-    end
-
-    it 'validate the start date of a work-package is >= start_dates of preceding work_packages' do
-      relation = Relation.new(from: predecessor,
-                              to: successor,
-                              relation_type: Relation::TYPE_PRECEDES)
-      relation.save!
-
-      # TODO: We should be able to test all this with stubbed objects and without hitting the db...
-      successor.reload
-      successor.start_date = '01/01/13'
-
-      expect(successor).not_to be_valid
-      expect(successor.errors[:start_date].size).to eq(1)
-    end
   end
 
   describe 'validations of versions' do

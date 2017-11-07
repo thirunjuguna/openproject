@@ -29,21 +29,19 @@
 #++
 
 class WorkPackages::UpdateInheritedAttributesService
-  include Concerns::Contracted
-
   attr_accessor :user,
                 :work_package,
                 :contract
 
-  def initialize(user:, work_package:, contract:)
+  def initialize(user:, work_package:)
     self.user = user
     self.work_package = work_package
-
-    self.contract = contract.new(work_package, user)
   end
 
   def call(attributes)
     inherit_attributes(attributes)
+
+    set_journal_note if work_package.changed?
 
     ServiceResult.new(success: work_package.save,
                       errors: work_package.errors,
@@ -53,23 +51,28 @@ class WorkPackages::UpdateInheritedAttributesService
   private
 
   def inherit_attributes(attributes)
-    inherit_done_ratio_from_leaves if (%i(estimated_hours done_ratio) & attributes).any?
+    relevant_attributes = (%i(estimated_hours done_ratio) & attributes)
 
-    inherit_estimated_hours_from_leaves if attributes.include?(:estimated_hours)
+    return unless relevant_attributes.any?
 
-    if work_package.changed?
-      work_package.journal_notes =
-        I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
-    end
+    leaves = work_package.leaves.select(*relevant_attributes, :status_id).includes(:status).to_a
+
+    inherit_done_ratio(leaves)
+
+    inherit_estimated_hours(leaves) if relevant_attributes.include?(:estimated_hours)
   end
 
-  def inherit_done_ratio_from_leaves
+  def set_journal_note
+    work_package.journal_notes = I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
+  end
+
+  def inherit_done_ratio(leaves)
     return if WorkPackage.done_ratio_disabled?
 
     return if WorkPackage.use_status_for_done_ratio? && work_package.status && work_package.status.default_done_ratio
 
     # done ratio = weighted average ratio of leaves
-    ratio = aggregate_done_ratio
+    ratio = aggregate_done_ratio(leaves)
 
     if ratio
       work_package.done_ratio = ratio.round
@@ -78,38 +81,56 @@ class WorkPackages::UpdateInheritedAttributesService
 
   ##
   # done ratio = weighted average ratio of leaves
-  def aggregate_done_ratio
-    leaves_count = work_package.leaves.count
+  def aggregate_done_ratio(leaves)
+    leaves_count = leaves.size
 
     if leaves_count > 0
-      average = leaf_average_estimated_hours
-      progress = leaf_done_ratio_sum(average) / (average * leaves_count)
+      average = average_estimated_hours(leaves)
+      progress = done_ratio_sum(leaves, average) / (average * leaves_count)
 
       progress.round(2)
     end
   end
 
-  def leaf_average_estimated_hours
+  def average_estimated_hours(leaves)
     # 0 and nil shall be considered the same for estimated hours
-    average = work_package.leaves.where('estimated_hours > 0').average(:estimated_hours).to_f
+    sum = all_estimated_hours(leaves).sum.to_f
+    count = all_estimated_hours(leaves).count
+
+    count = 1 if count.zero?
+
+    average = sum / count
 
     average.zero? ? 1 : average
   end
 
-  def leaf_done_ratio_sum(average_estimated_hours)
-    # TODO: merge into a single sql statement
+  def done_ratio_sum(leaves, average_estimated_hours)
     # Do not take into account estimated_hours when it is either nil or set to 0.0
-    sum_sql = <<-SQL
-    COALESCE((CASE WHEN estimated_hours = 0.0 THEN NULL ELSE estimated_hours END), #{average_estimated_hours})
-    * (CASE WHEN is_closed = #{work_package.class.connection.quoted_true} THEN 100 ELSE COALESCE(done_ratio, 0) END)
-    SQL
+    summands = leaves.map do |leaf|
+      estimated_hours = if leaf.estimated_hours.to_f > 0
+                          leaf.estimated_hours
+                        else
+                          average_estimated_hours
+                        end
 
-    work_package.leaves.distinct(false).joins(:status).sum(sum_sql)
+      done_ratio = if leaf.closed?
+                     100
+                   else
+                     leaf.done_ratio || 0
+                   end
+
+      estimated_hours * done_ratio
+    end
+
+    summands.sum
   end
 
-  def inherit_estimated_hours_from_leaves
-    # estimate = sum of leaves estimates
-    work_package.estimated_hours = work_package.leaves.sum(:estimated_hours).to_f
-    work_package.estimated_hours = nil if work_package.estimated_hours == 0.0
+  def inherit_estimated_hours(leaves)
+    work_package.estimated_hours = all_estimated_hours(leaves).sum.to_f
+    work_package.estimated_hours = nil if work_package.estimated_hours.zero?
+  end
+
+  def all_estimated_hours(work_packages)
+    work_packages.map(&:estimated_hours).reject { |hours| hours.to_f.zero? }
   end
 end

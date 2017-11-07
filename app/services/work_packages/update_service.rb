@@ -39,42 +39,58 @@ class WorkPackages::UpdateService
   end
 
   def call(attributes: {}, send_notifications: true)
+    reset
+
     as_user_and_sending(send_notifications) do
       update(attributes)
     end
   end
 
+  protected
+
+  attr_accessor :errors,
+                :unit_of_work
+
   private
 
-  def update(attributes)
-    unit_of_work = []
-    errors = []
+  def reset
+    self.errors = []
+    self.unit_of_work = []
+  end
 
+  def update(attributes)
     result = set_attributes(attributes)
+
+    errors << result.errors
 
     if result.success?
       unit_of_work << work_package
 
-      update_descendants.tap do |updated_descendants, descendants_errors|
-        errors += descendants_errors
-        unit_of_work += updated_descendants
-      end
-
-      reschedule_related.tap do |results|
-        errors += results.errors
-        unit_of_work += results.result
-      end
+      update_dependent attributes
 
       unit_of_work.uniq!
-
-      if errors.all?(&:empty?) && unit_of_work.all?(&:save)
-        cleanup(unit_of_work, attributes)
-      end
     end
 
-    ServiceResult.new(success: errors.all?(&:empty?),
-                      errors: errors,
+    ServiceResult.new(success: save_if_valid,
+                      errors: all_errors,
                       result: unit_of_work)
+  end
+
+  def save_if_valid
+    errors.all?(&:empty?) && unit_of_work.all?(&:save)
+  end
+
+  def all_errors
+    (errors + unit_of_work.map(&:errors)).uniq.reject(&:empty?)
+  end
+
+  def update_dependent(attributes)
+    update_descendants
+    update_ancestors
+
+    cleanup(attributes) if errors.all?(&:empty?)
+
+    reschedule_related
   end
 
   def set_attributes(attributes, wp = work_package)
@@ -86,22 +102,24 @@ class WorkPackages::UpdateService
   end
 
   def update_descendants
-    modified = []
-    errors = []
-
     if work_package.project_id_changed?
       work_package.descendants.each do |descendant|
         result = move_descendant(descendant, work_package.project)
 
         if result.success?
-          modified << descendant if descendant.changed?
+          unit_of_work << descendant if descendant.changed?
         else
           errors << result.errors
         end
       end
     end
+  end
 
-    [modified, errors]
+  def update_ancestors
+    super([work_package]).tap do |modified, modified_errors|
+      self.unit_of_work += modified
+      self.errors += modified_errors
+    end
   end
 
   def move_descendant(descendant, project)
@@ -112,15 +130,15 @@ class WorkPackages::UpdateService
       .call(project)
   end
 
-  def cleanup(work_packages, attributes)
-    # TODO: add updated and errors to return values
-    update_ancestors(work_packages)
+  def cleanup(attributes)
+    project = attributes[:project_id] || attributes[:project]
 
-    if attributes.include?(:project_id)
-      delete_relations(work_packages)
-      move_time_entries(work_packages, attributes[:project_id])
+    if project
+      moved_work_packages = [work_package] + work_package.descendants
+      delete_relations(moved_work_packages)
+      move_time_entries(moved_work_packages, project)
     end
-    if attributes.include?(:type_id)
+    if attributes.include?(:type_id) || attributes.include?(:type)
       reset_custom_values
     end
   end
@@ -128,9 +146,7 @@ class WorkPackages::UpdateService
   def delete_relations(work_packages)
     unless Setting.cross_project_work_package_relations?
       Relation
-        .where(from: work_packages)
-        .or(Relation.where(to: work_packages))
-        .direct
+        .non_hierarchy_of_work_package(work_packages)
         .destroy_all
     end
   end
@@ -141,15 +157,18 @@ class WorkPackages::UpdateService
       .update_all(project_id: project_id)
   end
 
-  def reset_custom_values(work_packages)
-    work_packages.each(&:reset_custom_values!)
+  def reset_custom_values
+    work_package.reset_custom_values!
   end
 
   def reschedule_related
-    WorkPackages::SetScheduleService
-      .new(user: user,
-           work_packages: work_package)
-      .call(work_package.changed.map(&:to_sym))
+    result = WorkPackages::SetScheduleService
+             .new(user: user,
+                  work_packages: work_package)
+             .call(work_package.changed.map(&:to_sym))
+
+    self.errors += result.errors
+    self.unit_of_work += result.result
   end
 
   def as_user_and_sending(send_notifications)
@@ -168,5 +187,12 @@ class WorkPackages::UpdateService
     end
 
     result
+  end
+
+  def call_and_assign(method, params, updated, errors)
+    send(method, *params).tap do |updated_by_method, errors_by_method|
+      errors += errors_by_method
+      updated += updated_by_method
+    end
   end
 end
