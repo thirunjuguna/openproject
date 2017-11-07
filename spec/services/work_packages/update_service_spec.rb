@@ -134,6 +134,13 @@ describe WorkPackages::UpdateService, type: :model do
 
       context 'when the saving is unsuccessful' do
         let(:work_package_save_result) { false }
+        let(:saving_errors) { double('saving_errors', empty?: false) }
+
+        before do
+          allow(work_package)
+            .to receive(:errors)
+            .and_return(saving_errors)
+        end
 
         it 'is unsuccessful' do
           expect(subject.success?).to be_falsey
@@ -146,11 +153,6 @@ describe WorkPackages::UpdateService, type: :model do
         end
 
         it "exposes the work_packages's errors" do
-          saving_errors = double('saving_errors', empty?: false)
-          allow(work_package)
-            .to receive(:errors)
-            .and_return(saving_errors)
-
           subject
 
           expect(subject.errors).to eql [saving_errors]
@@ -225,7 +227,7 @@ describe WorkPackages::UpdateService, type: :model do
 
           expect(scope)
             .to receive(:update_all)
-            .with(project_id: target_project)
+            .with(project_id: target_project.id)
 
           instance.call(attributes: { project: target_project })
         end

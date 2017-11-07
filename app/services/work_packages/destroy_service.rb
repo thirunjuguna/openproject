@@ -29,7 +29,7 @@
 #++
 
 class WorkPackages::DestroyService
-  include Shared::UpdateAncestors
+  include ::WorkPackages::Shared::UpdateAncestors
 
   attr_accessor :user, :work_package
 

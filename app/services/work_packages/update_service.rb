@@ -29,7 +29,7 @@
 #++
 
 class WorkPackages::UpdateService
-  include Shared::UpdateAncestors
+  include ::WorkPackages::Shared::UpdateAncestors
 
   attr_accessor :user, :work_package
 
@@ -71,7 +71,11 @@ class WorkPackages::UpdateService
       unit_of_work.uniq!
     end
 
-    ServiceResult.new(success: save_if_valid,
+    if save_if_valid
+      update_ancestors
+    end
+
+    ServiceResult.new(success: all_errors.empty?,
                       errors: all_errors,
                       result: unit_of_work)
   end
@@ -86,7 +90,6 @@ class WorkPackages::UpdateService
 
   def update_dependent(attributes)
     update_descendants
-    update_ancestors
 
     cleanup(attributes) if errors.all?(&:empty?)
 
@@ -131,12 +134,12 @@ class WorkPackages::UpdateService
   end
 
   def cleanup(attributes)
-    project = attributes[:project_id] || attributes[:project]
+    project_id = attributes[:project_id] || (attributes[:project] && attributes[:project].id)
 
-    if project
+    if project_id
       moved_work_packages = [work_package] + work_package.descendants
       delete_relations(moved_work_packages)
-      move_time_entries(moved_work_packages, project)
+      move_time_entries(moved_work_packages, project_id)
     end
     if attributes.include?(:type_id) || attributes.include?(:type)
       reset_custom_values

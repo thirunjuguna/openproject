@@ -56,23 +56,23 @@ module WorkPackages
         modified = []
         modified_errors = []
 
-        work_packages.map(&:ancestors).flatten.each do |ancestor|
-          result = inherit_to_ancestor(ancestor, changes)
+        work_packages.each do |wp|
+          result = inherit_to_ancestors(wp, changes)
 
           if result.success?
-            modified_errors << ancestor if ancestor.changed?
+            modified += result.result
           else
-            errors << result.errors
+            modified_errors += result.errors
           end
         end
 
         [modified, modified_errors]
       end
 
-      def inherit_to_ancestor(ancestor, changes)
-        WorkPackages::UpdateInheritedAttributesService
+      def inherit_to_ancestors(wp, changes)
+        WorkPackages::UpdateAncestorsService
           .new(user: user,
-               work_package: ancestor)
+               work_package: wp)
           .call(changes)
       end
     end

@@ -28,7 +28,7 @@
 
 require 'spec_helper'
 
-describe WorkPackages::UpdateInheritedAttributesService, type: :model do
+describe WorkPackages::UpdateAncestorsService, type: :model do
   let(:user) { FactoryGirl.create :user }
   let(:parent) { FactoryGirl.create :work_package, status: open_status }
   let(:estimated_hours) { [nil, nil, nil] }
@@ -36,28 +36,33 @@ describe WorkPackages::UpdateInheritedAttributesService, type: :model do
   let(:statuses) { %i(open open open) }
   let(:open_status) { FactoryGirl.create :status }
   let(:closed_status) { FactoryGirl.create :closed_status }
+  let(:children) do
+    (statuses.size - 1).downto(0).map do |i|
+      FactoryGirl.create :work_package,
+                         parent: parent,
+                         status: statuses[i] == :open ? open_status : closed_status,
+                         estimated_hours: estimated_hours[i],
+                         done_ratio: done_ratios[i]
+    end
+  end
+  let(:aggregate_done_ratio) { 0.0 }
 
   shared_examples 'attributes of parent having children' do
-    let(:aggregate_done_ratio) { 0.0 }
-
     before do
-      (statuses.size - 1).downto(0).each do |i|
-        FactoryGirl.create :work_package,
-                           parent: parent,
-                           status: statuses[i] == :open ? open_status : closed_status,
-                           estimated_hours: estimated_hours[i],
-                           done_ratio: done_ratios[i]
-      end
+      children
+    end
 
-      parent.reload
+    it 'updated one work package - the parent' do
+      expect(subject.result)
+        .to match_array [parent]
     end
 
     it 'has the expected aggregate done ratio' do
-      expect(subject.result.done_ratio).to eq aggregate_done_ratio
+      expect(subject.result.first.done_ratio).to eq aggregate_done_ratio
     end
 
     it 'has the expected estimated_hours' do
-      expect(subject.result.estimated_hours).to eq aggregate_estimated_hours
+      expect(subject.result.first.estimated_hours).to eq aggregate_estimated_hours
     end
 
     it 'is a success' do
@@ -69,16 +74,21 @@ describe WorkPackages::UpdateInheritedAttributesService, type: :model do
   subject do
     described_class
       .new(user: user,
-           work_package: parent)
+           work_package: children.first)
       .call(%i(done_ratio estimated_hours))
   end
 
   context 'with no estimated hours and no progress' do
-    it_behaves_like 'attributes of parent having children' do
-      let(:statuses) { %i(open open open) }
+    let(:statuses) { %i(open open open) }
 
-      let(:aggregate_done_ratio) { 0 }
-      let(:aggregate_estimated_hours) { nil }
+    it 'is a success' do
+      expect(subject)
+        .to be_success
+    end
+
+    it 'does not update the parent' do
+      expect(subject.result)
+        .to be_empty
     end
   end
 

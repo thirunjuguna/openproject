@@ -105,7 +105,11 @@ class WorkPackages::SetScheduleService
     # TODO: move into schedule dependency
     delta = date_rescheduling_delta(dependency.follows_moved.first.to)
 
-    required_delta = [dependency.max_date_of_followed - scheduled.start_date, [delta, 0].min].max
+    required_delta = if delta.zero?
+                       0
+                     else
+                       [dependency.max_date_of_followed - scheduled.start_date, [delta, 0].min].max
+                     end
 
     scheduled.start_date += required_delta
     scheduled.due_date += required_delta

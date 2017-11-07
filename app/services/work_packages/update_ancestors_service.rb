@@ -28,7 +28,7 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-class WorkPackages::UpdateInheritedAttributesService
+class WorkPackages::UpdateAncestorsService
   attr_accessor :user,
                 :work_package,
                 :contract
@@ -39,43 +39,53 @@ class WorkPackages::UpdateInheritedAttributesService
   end
 
   def call(attributes)
-    inherit_attributes(attributes)
+    modified = update_ancestors(attributes)
 
-    set_journal_note if work_package.changed?
+    set_journal_note(modified)
 
-    ServiceResult.new(success: work_package.save,
-                      errors: work_package.errors,
-                      result: work_package)
+    ServiceResult.new(success: modified.all?(&:save),
+                      errors: modified.map(&:errors).reject(&:empty?),
+                      result: modified)
   end
 
   private
 
-  def inherit_attributes(attributes)
-    relevant_attributes = (%i(estimated_hours done_ratio) & attributes)
+  def update_ancestors(attributes)
+    work_package.ancestors.includes(:status).select do |ancestor|
+      inherit_attributes(ancestor, attributes)
 
-    return unless relevant_attributes.any?
-
-    leaves = work_package.leaves.select(*relevant_attributes, :status_id).includes(:status).to_a
-
-    inherit_done_ratio(leaves)
-
-    inherit_estimated_hours(leaves) if relevant_attributes.include?(:estimated_hours)
+      ancestor.changed?
+    end
   end
 
-  def set_journal_note
-    work_package.journal_notes = I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
+  def inherit_attributes(ancestor, attributes)
+    relevant_attributes = %i(estimated_hours done_ratio)
+
+    return unless (relevant_attributes & attributes).any?
+
+    leaves = ancestor.leaves.select(*relevant_attributes, :status_id).includes(:status).to_a
+
+    inherit_done_ratio(ancestor, leaves)
+
+    inherit_estimated_hours(ancestor, leaves) if attributes.include?(:estimated_hours)
   end
 
-  def inherit_done_ratio(leaves)
+  def set_journal_note(work_packages)
+    work_packages.each do |wp|
+      wp.journal_notes = I18n.t('work_package.updated_automatically_by_child_changes', child: "##{work_package.id}")
+    end
+  end
+
+  def inherit_done_ratio(ancestor, leaves)
     return if WorkPackage.done_ratio_disabled?
 
-    return if WorkPackage.use_status_for_done_ratio? && work_package.status && work_package.status.default_done_ratio
+    return if WorkPackage.use_status_for_done_ratio? && ancestor.status && ancestor.status.default_done_ratio
 
     # done ratio = weighted average ratio of leaves
     ratio = aggregate_done_ratio(leaves)
 
     if ratio
-      work_package.done_ratio = ratio.round
+      ancestor.done_ratio = ratio.round
     end
   end
 
@@ -125,9 +135,9 @@ class WorkPackages::UpdateInheritedAttributesService
     summands.sum
   end
 
-  def inherit_estimated_hours(leaves)
-    work_package.estimated_hours = all_estimated_hours(leaves).sum.to_f
-    work_package.estimated_hours = nil if work_package.estimated_hours.zero?
+  def inherit_estimated_hours(ancestor, leaves)
+    ancestor.estimated_hours = all_estimated_hours(leaves).sum.to_f
+    ancestor.estimated_hours = nil if ancestor.estimated_hours.zero?
   end
 
   def all_estimated_hours(work_packages)

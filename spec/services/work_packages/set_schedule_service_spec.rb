@@ -216,6 +216,24 @@ describe WorkPackages::SetScheduleService do
       end
     end
 
+    context 'moving forward with the follower having enough space left to not be moved at all' do
+      let(:follower1_start_date) { Date.today + 10.day }
+      let(:follower1_due_date) { Date.today + 12.day }
+
+      before do
+        work_package.due_date = Date.today + 5.days
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [follower1_start_date, follower1_due_date] }
+        end
+        let(:unchanged) do
+          [following_work_package1]
+        end
+      end
+    end
+
     context 'moving forward with the follower having some space left and a delay' do
       let(:follower1_start_date) { Date.today + 5.day }
       let(:follower1_due_date) { Date.today + 7.day }
@@ -313,6 +331,21 @@ describe WorkPackages::SetScheduleService do
         end
         let(:unchanged) do
           [other_work_package]
+        end
+      end
+    end
+
+    context 'removing the dates on the predecessor' do
+      before do
+        work_package.start_date = work_package.due_date = nil
+      end
+
+      it_behaves_like 'reschedules' do
+        let(:expected) do
+          { following_work_package1 => [follower1_start_date, follower1_due_date] }
+        end
+        let(:unchanged) do
+          [following_work_package1]
         end
       end
     end

@@ -324,110 +324,6 @@ describe WorkPackage, type: :model do
         end
       end
 
-      context 'upon preceding work package due date update' do
-        let(:work_package2_start) { work_package1_due + 2 }
-        let(:work_package2_due) { work_package1_due + 5 }
-
-        before do
-          work_package1.reload
-          work_package2.reload
-        end
-
-        context 'when the date is moved forward into the following work package dates' do
-          let(:new_work_package1_due) { work_package2.start_date + 1 }
-
-          before do
-            work_package1.due_date = new_work_package1_due
-            work_package1.save!
-          end
-
-          it_behaves_like 'scheduled work package' do
-            let(:expected_start) { new_work_package1_due + 1 }
-            let(:expected_due) { new_work_package1_due + 4 }
-          end
-        end
-
-        context 'when the date is moved forward but not inside the following work package dates' do
-          let(:new_work_package1_due) { work_package1_due + 1 }
-
-          before do
-            work_package1.due_date = new_work_package1_due
-            work_package1.save!
-          end
-
-          it_behaves_like 'scheduled work package' do
-            let(:expected_start) { work_package2_start }
-            let(:expected_due) { work_package2_due }
-          end
-        end
-
-        context 'when the date is moved backwards' do
-          let(:move_by) { -1 }
-          let(:new_work_package1_due) { work_package1_due + move_by }
-
-          before do
-            work_package1.due_date = new_work_package1_due
-            work_package1.save!
-          end
-
-          it_behaves_like 'scheduled work package' do
-            let(:expected_start) { work_package2_start + move_by }
-            let(:expected_due) { work_package2_due + move_by }
-          end
-        end
-
-        context 'when the due date is removed' do
-          let(:new_work_package1_due) { nil }
-
-          before do
-            work_package1.due_date = new_work_package1_due
-            work_package1.save!
-          end
-
-          it_behaves_like 'scheduled work package' do
-            let(:expected_start) { work_package2_start }
-            let(:expected_due) { work_package2_due }
-          end
-        end
-
-        context 'when there is another work package also preceding the wp' do
-          let(:work_package3) do
-            FactoryGirl.create(:work_package,
-                               start_date: work_package1_start,
-                               due_date: work_package1_due)
-          end
-          let(:follows_relation2) do
-            FactoryGirl.create(:relation,
-                               relation_type: Relation::TYPE_PRECEDES,
-                               from: work_package3,
-                               to: work_package2)
-          end
-
-          before do
-            follows_relation2
-          end
-
-          context 'when the date is moved backwards' do
-            let(:move_by) { -3 }
-            let(:new_work_package1_due) { work_package1_due + move_by }
-
-            before do
-              work_package1.due_date = new_work_package1_due
-              work_package1.save!
-            end
-
-            it_behaves_like 'scheduled work package' do
-              # moved backwards as much as possible
-              let(:expected_start) { work_package3.due_date + delay + 1 }
-              let(:expected_due) do
-                work_package3.due_date + delay + 1 +
-                  (work_package3.due_date - work_package3.start_date)
-              end
-            end
-          end
-        end
-      end
-
       context 'upon preceding work package start date update' do
         let(:work_package2_start) { work_package1_due + 2 }
         let(:work_package2_due) { work_package1_due + 5 }
@@ -516,22 +412,6 @@ describe WorkPackage, type: :model do
         it_behaves_like 'scheduled work package' do
           let(:expected_start) { nil }
           let(:expected_due) { nil }
-        end
-      end
-
-      context 'upon moving the following work package inside the preceding work package dates' do
-        let(:work_package2_start) { work_package1_due + 2 }
-        let(:work_package2_due) { work_package1_due + 5 }
-
-        before do
-          work_package1.reload
-          work_package2.reload
-
-          work_package2.start_date = work_package1_start
-        end
-
-        it 'should be invalid' do
-          expect(work_package2).to be_invalid
         end
       end
 
