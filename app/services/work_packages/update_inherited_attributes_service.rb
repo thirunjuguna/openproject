@@ -46,7 +46,8 @@ class WorkPackages::UpdateInheritedAttributesService
     inherit_attributes(attributes)
 
     ServiceResult.new(success: work_package.save,
-                      errors: work_package.errors)
+                      errors: work_package.errors,
+                      result: work_package)
   end
 
   private

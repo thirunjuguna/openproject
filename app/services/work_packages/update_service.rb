@@ -29,6 +29,8 @@
 #++
 
 class WorkPackages::UpdateService
+  include Shared::UpdateAncestors
+
   attr_accessor :user, :work_package
 
   def initialize(user:, work_package:)
@@ -141,36 +143,6 @@ class WorkPackages::UpdateService
 
   def reset_custom_values(work_packages)
     work_packages.each(&:reset_custom_values!)
-  end
-
-  def update_ancestors(changed_work_packages)
-    changes = changed_work_packages
-              .map { |wp| wp.previous_changes.keys }
-              .flatten
-              .uniq
-              .map(&:to_sym)
-    modified = []
-    errors = []
-
-    work_package.ancestors.each do |ancestor|
-      result = inherit_to_ancestor(ancestor, changes)
-
-      if result.success?
-        modified << ancestor if ancestor.changed?
-      else
-        errors << result.errors
-      end
-    end
-
-    [modified, errors]
-  end
-
-  def inherit_to_ancestor(ancestor, changes)
-    WorkPackages::UpdateInheritedAttributesService
-      .new(user: user,
-           work_package: ancestor,
-           contract: WorkPackages::UpdateContract)
-      .call(changes)
   end
 
   def reschedule_related

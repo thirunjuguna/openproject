@@ -82,11 +82,11 @@ module WorkPackages
               writeable: ->(*) {
                 model.leaf?
               } do
-      if start_before_parents_soonest_start?
-        message = I18n.t('activerecord.errors.models.work_package.attributes.start_date.violates_parent_relationships',
-                         soonest_start: Date.today + 4.days)
+      if start_before_soonest_start?
+        message = I18n.t('activerecord.errors.models.work_package.attributes.start_date.violates_relationships',
+                         soonest_start: model.soonest_start)
 
-        errors.add :start_date, message, error_symbol: :violates_parent_relationships
+        errors.add :start_date, message, error_symbol: :violates_relationships
       end
     end
 
@@ -127,11 +127,10 @@ module WorkPackages
       list.exists?(user_id: id)
     end
 
-    def start_before_parents_soonest_start?
+    def start_before_soonest_start?
       model.start_date &&
-        model.parent &&
-        model.parent.soonest_start &&
-        model.start_date < model.parent.soonest_start
+        model.soonest_start &&
+        model.start_date < model.soonest_start
     end
   end
 end

@@ -49,7 +49,6 @@ module WorkPackage::Validations
               unless: Proc.new { |wp| wp.start_date.blank? }
     validates :due_date, date: { allow_blank: true }
 
-   # validate :validate_start_date_before_soonest_start_date
     validate :validate_fixed_version_is_assignable, unless: :skip_fixed_version_validation?
     validate :validate_fixed_version_is_still_open, unless: :skip_fixed_version_validation?
     validate :validate_enabled_type
@@ -96,14 +95,6 @@ module WorkPackage::Validations
   def skip_fixed_version_validation?
     !!skip_fixed_version_validation
   end
-
- # def validate_start_date_before_soonest_start_date
- #   if start_date && soonest_start && start_date < soonest_start
- #     errors.add :start_date,
- #                :violates_relationships,
- #                soonest_start: soonest_start
- #   end
- # end
 
   def validate_fixed_version_is_assignable
     if fixed_version_id && !assignable_versions.map(&:id).include?(fixed_version_id)

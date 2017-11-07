@@ -119,18 +119,11 @@ class WorkPackage < ActiveRecord::Base
 
   acts_as_watchable
 
-  #after_save :update_parent_attributes
-  after_destroy :update_parent_attributes
-
   after_save :remove_invalid_relations, if: -> { parent_id_changed? }
   after_save :recalculate_attributes_for_former_parent
 
-  before_destroy :fetch_children_to_destroy
-  after_destroy :destroy_children
-
   before_create :default_assign
   before_save :close_duplicates, :update_done_ratio_from_status
-  before_destroy :remove_attachments
 
   acts_as_customizable
 
@@ -159,6 +152,7 @@ class WorkPackage < ActiveRecord::Base
   after_validation :set_attachments_error_details,
                    if: lambda { |work_package| work_package.errors.messages.has_key? :attachments }
 
+  # TODO
   associated_to_ask_before_destruction TimeEntry,
                                        ->(work_packages) {
                                          TimeEntry.on_work_packages(work_packages).count > 0
@@ -650,14 +644,6 @@ class WorkPackage < ActiveRecord::Base
     default_id && attributes.except(key).values.all?(&:blank?)
   end
 
-  # this removes all attachments separately before destroying the issue
-  # avoids getting a ActiveRecord::StaleObjectError when deleting an issue
-  def remove_attachments
-    # immediately saves to the db
-    attachments.clear
-    reload # important
-  end
-
   def self.having_fixed_version_from_other_project
     where(
       "#{WorkPackage.table_name}.fixed_version_id IS NOT NULL" +
@@ -776,13 +762,5 @@ class WorkPackage < ActiveRecord::Base
     end
 
     related.select(&:present?)
-  end
-
-  def fetch_children_to_destroy
-    @children_to_destroy = children
-  end
-
-  def destroy_children
-    @children_to_destroy.each(&:destroy)
   end
 end
