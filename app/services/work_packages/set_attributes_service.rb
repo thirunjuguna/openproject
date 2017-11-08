@@ -28,7 +28,7 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-class SetAttributesWorkPackageService
+class WorkPackages::SetAttributesService
   include Concerns::Contracted
 
   attr_accessor :user,

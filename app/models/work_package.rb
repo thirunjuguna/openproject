@@ -115,6 +115,7 @@ class WorkPackage < ActiveRecord::Base
     where(author_id: author.id)
   }
 
+  # TODO: put into create service
   after_initialize :set_default_values
 
   acts_as_watchable

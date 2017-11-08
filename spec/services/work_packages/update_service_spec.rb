@@ -52,15 +52,15 @@ describe WorkPackages::UpdateService, type: :model do
 
   describe 'call' do
     let(:set_attributes_service) do
-      service = double("SetAttributesWorkPackageService",
+      service = double("WorkPackages::SetAttributesService",
                        new: set_attributes_service_instance)
 
-      stub_const('SetAttributesWorkPackageService', service)
+      stub_const('WorkPackages::SetAttributesService', service)
 
       service
     end
     let(:set_attributes_service_instance) do
-      instance = double("SetAttributesWorkPackageServiceInstance")
+      instance = double("WorkPackages::SetAttributesServiceInstance")
 
       allow(instance)
         .to receive(:call) do |attributes|

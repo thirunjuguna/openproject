@@ -91,35 +91,26 @@ describe WorkPackages::DestroyService do
       FactoryGirl.build_stubbed(:work_package)
     end
     let(:expect_inherited_attributes_service_calls) do
-      [parent, grandparent].each do |ancestor|
-        inherited_service_instance = double(WorkPackages::UpdateInheritedAttributesService)
+      inherited_service_instance = double(WorkPackages::UpdateAncestorsService)
 
-        service_result = ServiceResult.new(success: true,
-                                           errors: [],
-                                           result: work_package)
+      service_result = ServiceResult.new(success: true,
+                                         errors: [],
+                                         result: [parent, grandparent])
 
-        expect(WorkPackages::UpdateInheritedAttributesService)
-          .to receive(:new)
-          .with(user: user,
-                work_package: ancestor,
-                contract: WorkPackages::UpdateContract)
-          .and_return(inherited_service_instance)
+      expect(WorkPackages::UpdateAncestorsService)
+        .to receive(:new)
+        .with(user: user,
+              work_package: work_package)
+        .and_return(inherited_service_instance)
 
-        expect(inherited_service_instance)
-          .to receive(:call)
-          .with(work_package.attributes.keys.map(&:to_sym))
-          .and_return(service_result)
-      end
+      expect(inherited_service_instance)
+        .to receive(:call)
+        .with(work_package.attributes.keys.map(&:to_sym))
+        .and_return(service_result)
     end
     let(:expect_no_inherited_attributes_service_calls) do
-      expect(WorkPackages::UpdateInheritedAttributesService)
+      expect(WorkPackages::UpdateAncestorsService)
         .not_to receive(:new)
-    end
-
-    before do
-      allow(work_package)
-        .to receive(:ancestors)
-        .and_return [parent, grandparent]
     end
 
     it 'calls the inherit attributes service for each ancestor' do

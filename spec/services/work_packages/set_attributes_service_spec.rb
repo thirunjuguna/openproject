@@ -30,7 +30,7 @@
 
 require 'spec_helper'
 
-describe SetAttributesWorkPackageService, type: :model do
+describe WorkPackages::SetAttributesService, type: :model do
   let(:user) { FactoryGirl.build_stubbed(:user) }
   let(:project) do
     p = FactoryGirl.build_stubbed(:project)

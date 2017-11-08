@@ -100,7 +100,7 @@ class WorkPackages::RescheduleService
   end
 
   def set_dates(scheduled, attributes)
-    SetAttributesWorkPackageService
+    WorkPackages::SetAttributesService
       .new(user: user,
            work_package: scheduled,
            contract: WorkPackages::UpdateContract)
