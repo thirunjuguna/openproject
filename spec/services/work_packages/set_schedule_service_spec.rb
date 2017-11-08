@@ -718,4 +718,62 @@ describe WorkPackages::SetScheduleService do
       end
     end
   end
+
+  context 'when setting the parent' do
+    let(:new_parent_work_package) { FactoryGirl.build_stubbed(:stubbed_work_package) }
+    let(:attributes) { [:parent] }
+
+    before do
+      allow(new_parent_work_package)
+        .to receive(:soonest_start)
+        .and_return(soonest_date)
+      allow(work_package)
+        .to receive(:parent)
+        .and_return(new_parent_work_package)
+    end
+
+    context "with the parent being restricted in it's ability to be moved" do
+      let(:soonest_date) { Date.today + 3.days }
+
+      it 'sets the start date to the earliest possible date' do
+        subject
+
+        expect(work_package.start_date).to eql(Date.today + 3.days)
+      end
+    end
+
+    context 'with the parent being restricted but work package already having dates set' do
+      let(:soonest_date) { Date.today + 3.days }
+
+      before do
+        work_package.start_date = Date.today + 4.days
+        work_package.due_date = Date.today + 5.days
+      end
+
+      it 'sets the dates to provided dates' do
+        subject
+
+        expect(work_package.start_date).to eql(Date.today + 4.days)
+        expect(work_package.due_date).to eql(Date.today + 5.days)
+      end
+    end
+
+    context 'with the parent being restricted but the attributes define an earlier date' do
+      let(:soonest_date) { Date.today + 3.days }
+
+      before do
+        work_package.start_date = Date.today + 1.days
+        work_package.due_date = Date.today + 2.days
+      end
+
+      # This would be invalid but the dates should be set nevertheless
+      # so we can have a correct error handling.
+      it 'sets the dates to provided dates' do
+        subject
+
+        expect(work_package.start_date).to eql(Date.today + 1.days)
+        expect(work_package.due_date).to eql(Date.today + 2.days)
+      end
+    end
+  end
 end

@@ -167,7 +167,7 @@ class WorkPackages::UpdateService
   def reschedule_related
     result = WorkPackages::SetScheduleService
              .new(user: user,
-                  work_packages: work_package)
+                  work_packages: [work_package])
              .call(work_package.changed.map(&:to_sym))
 
     self.errors += result.errors

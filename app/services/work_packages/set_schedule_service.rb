@@ -37,11 +37,15 @@ class WorkPackages::SetScheduleService
   end
 
   def call(attributes = %i(start_date due_date))
-    altered = if (%i(start_date due_date) & attributes).any?
-                schedule_following
+    altered = if (%i(parent parent_id) & attributes).any?
+                schedule_by_parent
               else
                 []
               end
+
+    if (%i(start_date due_date) & attributes).any?
+      altered += schedule_following
+    end
 
     ServiceResult.new(success: true,
                       errors: [],
@@ -49,6 +53,12 @@ class WorkPackages::SetScheduleService
   end
 
   private
+
+  def schedule_by_parent
+    work_packages
+      .select { |wp| wp.start_date.nil? && wp.parent }
+      .each { |wp| wp.start_date = wp.parent.soonest_start }
+  end
 
   # Finds all work packages that need to be rescheduled because of a rescheduling of the service's work package
   # and reschedules them.
