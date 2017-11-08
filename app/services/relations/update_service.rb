@@ -28,36 +28,21 @@
 # See doc/COPYRIGHT.rdoc for more details.
 #++
 
-class CreateRelationService
-  include Concerns::Contracted
+class Relations::UpdateService < Relations::BaseService
+  attr_accessor :relation
 
-  attr_accessor :user
+  self.contract = Relations::UpdateContract
 
-  self.contract = Relations::CreateContract
+  def initialize(user:, relation:)
+    super(user: user)
+    self.relation = relation
 
-  def initialize(user:)
-    @user = user
-  end
-
-  def call(relation, send_notifications: true)
-    User.execute_as user do
-      JournalManager.with_send_notifications send_notifications do
-        create relation
-      end
-    end
-  end
-
-  private
-
-  def create(relation)
     initialize_contract! relation
-
-    result, errors = validate_and_save relation
-
-    ServiceResult.new success: result, errors: errors, result: relation
   end
 
-  def initialize_contract!(relation)
-    self.contract = self.class.contract.new relation, user
+  def call(attributes: {}, send_notifications: true)
+    as_user_and_sending(send_notifications) do
+      update_relation relation, attributes
+    end
   end
 end

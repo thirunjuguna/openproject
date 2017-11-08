@@ -45,4 +45,10 @@ class ServiceResult
   def failure?
     !success?
   end
+
+  def merge!(other)
+    self.success &&= other.success
+    self.errors += other.errors
+    self.result += other.result
+  end
 end

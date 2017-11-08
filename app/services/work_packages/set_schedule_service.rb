@@ -36,7 +36,7 @@ class WorkPackages::SetScheduleService
     self.work_packages = work_packages
   end
 
-  def call(attributes)
+  def call(attributes = %i(start_date due_date))
     altered = if (%i(start_date due_date) & attributes).any?
                 schedule_following
               else
