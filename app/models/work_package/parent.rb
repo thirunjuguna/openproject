@@ -52,19 +52,13 @@ module WorkPackage::Parent
   end
 
   def parent
-    if @parent_object
-      @parent_object
-    elsif parent_relation && @parent_set
-      parent_relation.from
-    elsif @parent_id
-      @parent_object ||= WorkPackage.find(@parent_id)
-    end
+    @parent_object || parent_from_relation || parent_from_id
   end
 
   def reload(*args)
     @parent_object = nil
     @parent_id = nil
-    @parent_set = false
+    @parent_id_previous_changes = nil
 
     super
   end
@@ -72,12 +66,11 @@ module WorkPackage::Parent
   def changes_applied
     @parent_id_previous_changes = changes.slice(:parent_id)
 
-    @parent_set = nil
     super
   end
 
   def previous_changes
-    super.merge(@parent_id_previous_changes)
+    super.merge(@parent_id_previous_changes || {})
   end
 
   def parent_id=(id)
@@ -107,6 +100,18 @@ module WorkPackage::Parent
       create_parent_relation from: parent_object
     elsif @parent_id
       create_parent_relation from_id: @parent_id
+    end
+  end
+
+  def parent_from_relation
+    if parent_relation && ((@parent_id && parent_relation.from.id == @parent_id) || !@parent_id)
+      parent_relation.from
+    end
+  end
+
+  def parent_from_id
+    if @parent_id
+      @parent_object = WorkPackage.find(@parent_id)
     end
   end
 end
