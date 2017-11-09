@@ -412,7 +412,7 @@ describe WorkPackage, type: :model do
 
       @priority_low ||= FactoryGirl.create(:priority_low, is_default: true)
       @priority_high ||= FactoryGirl.create(:priority_high)
-      @project ||= FactoryGirl.create(:project_with_types)
+      @project ||= FactoryGirl.create(:project, no_types: true, types: [@type])
 
       @current = FactoryGirl.create(:user, login: 'user1', mail: 'user1@users.com')
       allow(User).to receive(:current).and_return(@current)

@@ -57,9 +57,9 @@ module API
             call = service.call relation, send_notifications: (params[:notify] != 'false')
 
             if call.success?
-              representer.new call.result, current_user: current_user, embed_links: true
+              representer.new call.result.first, current_user: current_user, embed_links: true
             else
-              fail ::API::Errors::ErrorBase.create_and_merge_errors(call.errors)
+              fail ::API::Errors::ErrorBase.create_and_merge_errors(call.errors.first)
             end
           end
         end

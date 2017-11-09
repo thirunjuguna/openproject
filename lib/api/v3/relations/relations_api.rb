@@ -67,15 +67,15 @@ module API
               rep = parse_representer.new Relation.new, current_user: current_user
               relation = rep.from_json request.body.read
               attributes = filter_attributes relation
-              service = Relations::UpdateService.new relation: Relation.find_by_id!(params[:id]),
-                                                     user: current_user
+              service = ::Relations::UpdateService.new relation: Relation.find_by_id!(params[:id]),
+                                                       user: current_user
               call = service.call attributes: attributes,
                                   send_notifications: (params[:notify] != 'false')
 
               if call.success?
-                representer.new call.result, current_user: current_user, embed_links: true
+                representer.new call.result.first, current_user: current_user, embed_links: true
               else
-                fail ::API::Errors::ErrorBase.create_and_merge_errors(call.errors)
+                fail ::API::Errors::ErrorBase.create_and_merge_errors(call.errors.first)
               end
             end
 
