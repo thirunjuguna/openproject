@@ -121,7 +121,6 @@ class WorkPackage < ActiveRecord::Base
   acts_as_watchable
 
   after_save :remove_invalid_relations, if: -> { parent_id_changed? }
-  after_save :recalculate_attributes_for_former_parent
 
   before_create :default_assign
   before_save :close_duplicates, :update_done_ratio_from_status
@@ -131,8 +130,8 @@ class WorkPackage < ActiveRecord::Base
   acts_as_searchable columns: ['subject',
                                "#{table_name}.description",
                                "#{Journal.table_name}.notes"],
-                     include: [:project, :journals],
-                     references: [:projects, :journals],
+                     include: %i(project journals),
+                     references: %i(projects journals),
                      date_column: "#{quoted_table_name}.created_at",
                      # sort by id so that limited eager loading doesn't break with postgresql
                      order_column: "#{table_name}.id"
@@ -373,7 +372,7 @@ class WorkPackage < ActiveRecord::Base
   # Is the amount of work done less than it should for the due date
   def behind_schedule?
     return false if start_date.nil? || due_date.nil?
-    done_date = start_date + ((due_date - start_date + 1) * done_ratio / 100).floor
+    done_date = start_date + (duration * done_ratio / 100).floor
     done_date <= Date.today
   end
 
@@ -381,9 +380,8 @@ class WorkPackage < ActiveRecord::Base
   # see Redmine::Acts::Journalized::Permissions#journal_editable_by
   def editable_by?(user)
     project = self.project
-    allowed = user.allowed_to? :edit_work_package_notes, project, global: project.present?
-    allowed = user.allowed_to? :edit_own_work_package_notes, project, global: project.present? unless allowed
-    allowed
+    user.allowed_to?(:edit_work_package_notes, project, global: project.present?) ||
+      user.allowed_to?(:edit_own_work_package_notes, project, global: project.present?)
   end
 
   # Adds the 'virtual' attribute 'hours' to the result set.  Using the
@@ -577,14 +575,6 @@ class WorkPackage < ActiveRecord::Base
       issue.relations.direct.each do |relation|
         relation.destroy unless relation.valid?
       end
-    end
-  end
-
-  #TODO invalid now. Needs to be moved to a destroy service
-  def recalculate_attributes_for_former_parent
-    if parent_id_changed? && changes[:parent_id].first
-      #TODO invalid now
-      recalculate_attributes_for(changes[:parent_id].first)
     end
   end
 

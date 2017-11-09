@@ -40,6 +40,7 @@ class WorkPackages::UpdateAncestorsService
 
   def call(attributes)
     modified = update_ancestors(attributes)
+    modified += update_former_ancestors(attributes)
 
     set_journal_note(modified)
 
@@ -58,16 +59,24 @@ class WorkPackages::UpdateAncestorsService
     end
   end
 
+  def update_former_ancestors(attributes)
+    return [] unless (%i(parent_id parent) & attributes).any? && previous_parent_id(work_package)
+
+    parent = WorkPackage.find(previous_parent_id(work_package))
+
+    ([parent] + parent.ancestors).each do |ancestor|
+      inherit_attributes(ancestor, %i(estimated_hours done_ratio))
+    end.select(&:changed?)
+  end
+
   def inherit_attributes(ancestor, attributes)
-    relevant_attributes = %i(estimated_hours done_ratio)
+    return unless (%i(estimated_hours done_ratio parent parent_id) & attributes).any?
 
-    return unless (relevant_attributes & attributes).any?
-
-    leaves = ancestor.leaves.select(*relevant_attributes, :status_id).includes(:status).to_a
+    leaves = ancestor.leaves.select(:done_ratio, :estimated_hours, :status_id).includes(:status).to_a
 
     inherit_done_ratio(ancestor, leaves)
 
-    inherit_estimated_hours(ancestor, leaves) if attributes.include?(:estimated_hours)
+    inherit_estimated_hours(ancestor, leaves)
   end
 
   def set_journal_note(work_packages)
@@ -142,5 +151,9 @@ class WorkPackages::UpdateAncestorsService
 
   def all_estimated_hours(work_packages)
     work_packages.map(&:estimated_hours).reject { |hours| hours.to_f.zero? }
+  end
+
+  def previous_parent_id(work_package)
+    work_package.previous_changes[:parent_id].first
   end
 end
