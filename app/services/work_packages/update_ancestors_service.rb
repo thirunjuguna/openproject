@@ -154,6 +154,8 @@ class WorkPackages::UpdateAncestorsService
   end
 
   def previous_parent_id(work_package)
-    work_package.previous_changes[:parent_id].first
+    previous = work_package.previous_changes
+
+    (previous[:parent_id] || previous[:parent]).first
   end
 end

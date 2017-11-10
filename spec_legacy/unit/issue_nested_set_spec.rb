@@ -1,4 +1,5 @@
 #-- encoding: UTF-8
+
 #-- copyright
 # OpenProject is a project management system.
 # Copyright (C) 2012-2017 the OpenProject Foundation (OPF)
@@ -48,18 +49,6 @@ describe 'IssueNestedSet', type: :model do
     child.parent = grandchild
     assert !child.save
     refute_empty child.errors[:parent]
-  end
-
-  it 'should move parent updates old parent attributes' do
-    first_parent = create_issue!
-    second_parent = create_issue!
-    child = create_issue!(estimated_hours: 5,
-                          parent: first_parent)
-    assert_equal 5, first_parent.reload.estimated_hours
-    child.update_attributes(estimated_hours: 7,
-                            parent: second_parent)
-    assert_equal 7, second_parent.reload.estimated_hours
-    assert_nil first_parent.reload.estimated_hours
   end
 
   it 'should project copy should copy issue tree' do
