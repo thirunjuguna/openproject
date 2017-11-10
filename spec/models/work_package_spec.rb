@@ -38,7 +38,7 @@ describe WorkPackage, type: :model do
   let(:project) { FactoryGirl.create(:project, types: [type]) }
   let(:status) { FactoryGirl.create(:status) }
   let(:priority) { FactoryGirl.create(:priority) }
-  let(:work_package) {
+  let(:work_package) do
     WorkPackage.new.tap do |w|
       w.attributes = { project_id: project.id,
                        type_id: type.id,
@@ -49,7 +49,7 @@ describe WorkPackage, type: :model do
                        description: 'WorkPackage#create',
                        estimated_hours: '1:30' }
     end
-  }
+  end
 
   describe '.new' do
     context 'type' do
@@ -459,8 +459,6 @@ describe WorkPackage, type: :model do
   end
 
   describe '#copy_from' do
-    let(:type) { FactoryGirl.create(:type_standard) }
-    let(:project) { FactoryGirl.create(:project, types: [type]) }
     let(:custom_field) do
       FactoryGirl.create(:work_package_custom_field,
                          name: 'Database',
@@ -472,7 +470,7 @@ describe WorkPackage, type: :model do
       FactoryGirl.create(:bool_wp_custom_field)
     end
 
-    let(:source) { FactoryGirl.build(:work_package) }
+    let(:source) { work_package }
     let(:sink) { FactoryGirl.build(:work_package) }
 
     before do
@@ -482,11 +480,9 @@ describe WorkPackage, type: :model do
       project.work_package_custom_fields << bool_custom_field
       type.custom_fields << bool_custom_field
 
-      source.project_id = project.id
-
-      source.custom_field_values = { custom_field.id => 'MySQL',
+      source.custom_field_values = { custom_field.id => CustomOption.where(value: 'MySql').first,
                                      bool_custom_field.id => 'f' }
-      source.save
+      source.save!
     end
 
     shared_examples_for 'work package copy' do
@@ -528,15 +524,15 @@ describe WorkPackage, type: :model do
       it_behaves_like 'work package copy'
 
       context 'list custom_field' do
-        subject { sink.custom_value_for(custom_field.id).value }
+        subject { sink.custom_value_for(custom_field.id).typed_value }
 
         it { is_expected.to eq('MySQL') }
       end
 
       context 'bool custom_field' do
-        subject { sink.custom_value_for(bool_custom_field.id).value }
+        subject { sink.custom_value_for(bool_custom_field.id).typed_value }
 
-        it { is_expected.to eq('f') }
+        it { is_expected.to be_falsey }
       end
     end
 
